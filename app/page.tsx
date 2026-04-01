@@ -1,7 +1,15 @@
+"use client";
+
+import { useGraphData } from "@/lib/useGraphData";
+import Graph from "@/components/Graph";
+import LoadingScreen from "@/components/LoadingScreen";
+
 export default function Home() {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-white/50 text-lg">Loading graph...</p>
-    </div>
-  );
+  const { data, loading, error } = useGraphData();
+
+  if (loading || error || !data) {
+    return <LoadingScreen error={error} />;
+  }
+
+  return <Graph data={data} />;
 }
