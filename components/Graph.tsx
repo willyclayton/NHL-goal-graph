@@ -226,7 +226,11 @@ export default function Graph({ data }: GraphProps) {
       const skipEdges = isMobile && nodes.length > MOBILE_EDGE_CULL_NODE_THRESHOLD && k < 1;
 
       if (!skipEdges) {
-        ctx.globalAlpha = EDGE_ALPHA;
+        // Scale alpha based on edge count: low count = more visible, high count = subtle
+        const edgeAlpha = edges.length < 1000
+          ? Math.min(0.4, EDGE_ALPHA * (1000 / Math.max(1, edges.length)))
+          : EDGE_ALPHA;
+        ctx.globalAlpha = edgeAlpha;
         ctx.strokeStyle = EDGE_COLOR;
         ctx.lineWidth = EDGE_WIDTH / k;
         ctx.beginPath();
