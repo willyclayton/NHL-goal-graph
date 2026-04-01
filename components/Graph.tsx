@@ -411,22 +411,31 @@ export default function Graph({ data }: GraphProps) {
         }
       }
 
-      // --- Draw labels at high zoom ---
+      // --- Draw labels at high zoom (capped to avoid perf death) ---
       if (k > LABEL_ZOOM_THRESHOLD && nr) {
-        ctx.globalAlpha = 0.9;
+        ctx.globalAlpha = 0.85;
         const fontSize = Math.max(8, 12 / k);
         ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
         ctx.fillStyle = "#ffffff";
         ctx.textBaseline = "middle";
-        const countThreshold = Math.max(1, Math.floor(30 / k));
+
+        // Only label the top N nodes by count that are in viewport — max 40 labels
+        const MAX_LABELS = 40;
+        const candidates: { idx: number; count: number }[] = [];
 
         for (let i = 0; i < nr.xs.length; i++) {
-          if (nr.counts[i] < countThreshold) continue;
           if (!visibleSet.has(nr.ids[i])) continue;
           const nx = nr.xs[i];
           const ny = nr.ys[i];
           if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
-          ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
+          candidates.push({ idx: i, count: nr.counts[i] });
+        }
+
+        candidates.sort((a, b) => b.count - a.count);
+        const labelCount = Math.min(candidates.length, MAX_LABELS);
+        for (let j = 0; j < labelCount; j++) {
+          const i = candidates[j].idx;
+          ctx.fillText(nr.names[i], nr.xs[i] + nr.radii[i] + 3 / k, nr.ys[i]);
         }
       }
 
@@ -443,10 +452,15 @@ export default function Graph({ data }: GraphProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // Mouse/touch interaction
+  // Mouse/touch interaction — throttled to avoid excessive re-renders
+  const lastPointerTime = useRef(0);
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (isMobileRef.current) return; // mobile uses tap only
+      if (isMobileRef.current) return;
+
+      const now = performance.now();
+      if (now - lastPointerTime.current < 32) return; // ~30fps throttle
+      lastPointerTime.current = now;
 
       const t = transformRef.current;
       const wx = (e.clientX - t.x) / t.k;
@@ -456,9 +470,11 @@ export default function Graph({ data }: GraphProps) {
       if (!qt) return;
 
       const hitRadius = 15 / t.k;
-      const found = qt.find(wx, wy, hitRadius);
+      const found = qt.find(wx, wy, hitRadius) || null;
 
-      setHoveredNode(found || null);
+      if (found !== hoveredRef.current) {
+        setHoveredNode(found);
+      }
       setMousePos({ x: e.clientX, y: e.clientY });
     },
     []
