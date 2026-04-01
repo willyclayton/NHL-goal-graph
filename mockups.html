@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL Goal Graph — Color Scheme Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; color: #fff; font-family: Inter, system-ui, sans-serif; padding: 24px; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 8px; font-weight: 600; }
+  .subtitle { text-align: center; color: #888; font-size: 14px; margin-bottom: 40px; }
+  .grid { display: flex; flex-direction: column; gap: 48px; max-width: 1100px; margin: 0 auto; }
+  .mockup { border-radius: 16px; overflow: hidden; border: 1px solid #333; }
+  .mockup-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .mockup-header h2 { font-size: 18px; font-weight: 600; }
+  .mockup-header .tag { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,0.08); color: #aaa; }
+  .canvas-wrap { position: relative; height: 420px; overflow: hidden; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .overlay-ui { position: absolute; inset: 0; pointer-events: none; }
+  .search-btn { position: absolute; top: 12px; right: 12px; padding: 6px 14px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(8px); }
+  .legend { position: absolute; bottom: 12px; right: 12px; padding: 8px 12px; border-radius: 8px; font-size: 11px; backdrop-filter: blur(8px); }
+  .legend-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .path-bar { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 12px; font-size: 13px; backdrop-filter: blur(8px); white-space: nowrap; }
+  .path-arrow { margin: 0 6px; opacity: 0.6; }
+  .timeline { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 10px; font-size: 11px; backdrop-filter: blur(8px); display: flex; align-items: center; gap: 10px; }
+  .timeline-track { width: 180px; height: 4px; border-radius: 2px; }
+  .swatches { display: flex; gap: 4px; padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.05); }
+  .swatch { width: 32px; height: 32px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); }
+  .swatch-label { font-size: 10px; color: #666; margin-left: auto; display: flex; align-items: center; padding-right: 4px; }
+  .prompt-bar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 16px; border-radius: 99px; font-size: 12px; backdrop-filter: blur(8px); }
+</style>
+</head>
+<body>
+
+<h1>NHL Goal Graph — Round 2</h1>
+<p class="subtitle">You liked #3 Arctic Aurora. Here are 5 more riffs on that direction, plus the original for reference.</p>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const schemes = [
+  {
+    name: "Arctic Aurora (original)",
+    tag: "Your pick",
+    bg: "#071520",
+    scorerColors: ["#f0a050", "#e88030", "#cc6020"],
+    goalieColors: ["#40ccaa", "#30aa88", "#208866"],
+    edgeColor: "rgba(160,220,255,0.04)",
+    pathColor: "#ffffff",
+    uiBg: "rgba(7,21,32,0.8)",
+    uiBorder: "rgba(64,204,170,0.15)",
+    textColor: "#d0e8f0",
+    textMuted: "rgba(160,200,220,0.5)",
+    gradientTrack: "linear-gradient(90deg, #208866, #3060aa, #f0a050)",
+  },
+  {
+    name: "Deep Fjord",
+    tag: "Darker + gold path",
+    bg: "#04101a",
+    scorerColors: ["#e8944a", "#d07830", "#b06020"],
+    goalieColors: ["#3bbfa0", "#2a9a7a", "#1a7a5a"],
+    edgeColor: "rgba(100,180,200,0.035)",
+    pathColor: "#f0c840",
+    uiBg: "rgba(4,16,26,0.85)",
+    uiBorder: "rgba(59,191,160,0.12)",
+    textColor: "#c8dde8",
+    textMuted: "rgba(140,190,210,0.45)",
+    gradientTrack: "linear-gradient(90deg, #1a7a5a, #204880, #e8944a)",
+  },
+  {
+    name: "Frozen Lake",
+    tag: "Icy blue + coral",
+    bg: "#081820",
+    scorerColors: ["#ff7866", "#e85a48", "#cc4030"],
+    goalieColors: ["#55ddee", "#33bbcc", "#1899aa"],
+    edgeColor: "rgba(120,200,230,0.04)",
+    pathColor: "#e0f0ff",
+    uiBg: "rgba(8,24,32,0.82)",
+    uiBorder: "rgba(85,221,238,0.12)",
+    textColor: "#d8eef5",
+    textMuted: "rgba(180,220,235,0.45)",
+    gradientTrack: "linear-gradient(90deg, #1899aa, #445588, #ff7866)",
+  },
+  {
+    name: "Northern Pines",
+    tag: "Earthy + forest",
+    bg: "#0a1510",
+    scorerColors: ["#eebb55", "#ddaa33", "#cc8820"],
+    goalieColors: ["#44bb88", "#339966", "#227744"],
+    edgeColor: "rgba(120,200,150,0.04)",
+    pathColor: "#ffe8aa",
+    uiBg: "rgba(10,21,16,0.82)",
+    uiBorder: "rgba(68,187,136,0.12)",
+    textColor: "#d0e0d0",
+    textMuted: "rgba(160,200,170,0.45)",
+    gradientTrack: "linear-gradient(90deg, #227744, #556633, #eebb55)",
+  },
+  {
+    name: "Borealis",
+    tag: "Vivid aurora greens + violet",
+    bg: "#060e1c",
+    scorerColors: ["#cc77ff", "#aa55dd", "#8833bb"],
+    goalieColors: ["#33eebb", "#22cc99", "#11aa77"],
+    edgeColor: "rgba(100,220,180,0.04)",
+    pathColor: "#ffffff",
+    uiBg: "rgba(6,14,28,0.82)",
+    uiBorder: "rgba(51,238,187,0.12)",
+    textColor: "#d4e8f8",
+    textMuted: "rgba(170,210,230,0.45)",
+    gradientTrack: "linear-gradient(90deg, #11aa77, #4444aa, #cc77ff)",
+  },
+  {
+    name: "Polar Twilight",
+    tag: "Muted + elegant",
+    bg: "#0b1620",
+    scorerColors: ["#d9956a", "#c07848", "#a06030"],
+    goalieColors: ["#6aaab8", "#508898", "#3a6878"],
+    edgeColor: "rgba(140,190,210,0.035)",
+    pathColor: "#e8d8c0",
+    uiBg: "rgba(11,22,32,0.82)",
+    uiBorder: "rgba(106,170,184,0.12)",
+    textColor: "#c8d8e0",
+    textMuted: "rgba(150,180,200,0.45)",
+    gradientTrack: "linear-gradient(90deg, #3a6878, #5a5070, #d9956a)",
+  },
+];
+
+const grid = document.getElementById("grid");
+
+function drawGraph(canvas, scheme) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+  const rand = (seed) => {
+    let s = seed;
+    return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
+  };
+  const r = rand(42);
+
+  // Background
+  ctx.fillStyle = scheme.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Generate nodes
+  const scorers = [];
+  const goalies = [];
+  for (let i = 0; i < 80; i++) {
+    const angle = (i / 80 - 0.5) * Math.PI * 0.9;
+    scorers.push({
+      x: W * (0.68 + Math.cos(angle) * 0.18 + (r() - 0.5) * 0.06),
+      y: H * (0.5 + Math.sin(angle) * 0.38 + (r() - 0.5) * 0.04),
+      size: 2 + r() * 8,
+      ci: Math.floor(r() * 3),
+    });
+  }
+  for (let i = 0; i < 35; i++) {
+    const angle = (i / 35 - 0.5) * Math.PI * 0.85;
+    goalies.push({
+      x: W * (0.28 + Math.cos(angle) * 0.14 + (r() - 0.5) * 0.05),
+      y: H * (0.5 + Math.sin(angle) * 0.36 + (r() - 0.5) * 0.04),
+      size: 2.5 + r() * 7,
+      ci: Math.floor(r() * 3),
+    });
+  }
+
+  // Draw edges
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 400; i++) {
+    const s = scorers[Math.floor(r() * scorers.length)];
+    const g = goalies[Math.floor(r() * goalies.length)];
+    ctx.strokeStyle = scheme.edgeColor;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(g.x, g.y);
+    ctx.stroke();
+  }
+
+  // Draw a highlighted path
+  const pathNodes = [scorers[3], goalies[8], scorers[45], goalies[20], scorers[70]];
+  ctx.strokeStyle = scheme.pathColor;
+  ctx.lineWidth = 2.5;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  for (let i = 0; i < pathNodes.length; i++) {
+    if (i === 0) ctx.moveTo(pathNodes[i].x, pathNodes[i].y);
+    else ctx.lineTo(pathNodes[i].x, pathNodes[i].y);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Draw path node glows
+  for (const pn of pathNodes) {
+    ctx.fillStyle = scheme.pathColor;
+    ctx.globalAlpha = 0.15;
+    ctx.beginPath();
+    ctx.arc(pn.x, pn.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw scorer nodes
+  for (const s of scorers) {
+    ctx.fillStyle = scheme.scorerColors[s.ci];
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Draw goalie nodes
+  for (const g of goalies) {
+    ctx.fillStyle = scheme.goalieColors[g.ci];
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Draw path node rings
+  ctx.lineWidth = 2;
+  for (const pn of pathNodes) {
+    ctx.strokeStyle = scheme.pathColor;
+    ctx.beginPath();
+    ctx.arc(pn.x, pn.y, pn.size + 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Labels on large nodes near path
+  ctx.font = "11px Inter, system-ui, sans-serif";
+  ctx.fillStyle = scheme.textColor;
+  ctx.globalAlpha = 0.7;
+  const labels = ["Ovechkin", "Fleury", "Crosby", "Lundqvist", "McDavid"];
+  for (let i = 0; i < pathNodes.length; i++) {
+    ctx.fillText(labels[i], pathNodes[i].x + pathNodes[i].size + 5, pathNodes[i].y + 4);
+  }
+  ctx.globalAlpha = 1;
+}
+
+schemes.forEach((scheme, idx) => {
+  const mockup = document.createElement("div");
+  mockup.className = "mockup";
+  mockup.style.background = scheme.bg;
+
+  // Header
+  mockup.innerHTML = `
+    <div class="mockup-header" style="background:${scheme.uiBg};border-color:${scheme.uiBorder}">
+      <h2 style="color:${scheme.textColor}">${idx + 1}. ${scheme.name}</h2>
+      <span class="tag">${scheme.tag}</span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="c${idx}" width="1100" height="420"></canvas>
+      <div class="overlay-ui">
+        <div class="search-btn" style="background:${scheme.uiBg};border:1px solid ${scheme.uiBorder};color:${scheme.textMuted}">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          Search <kbd style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px">⌘K</kbd>
+        </div>
+        <div class="prompt-bar" style="background:${scheme.uiBg};border:1px solid ${scheme.uiBorder};color:${scheme.textMuted}">
+          Select a second player to find path
+        </div>
+        <div class="path-bar" style="background:${scheme.uiBg};border:1px solid ${scheme.uiBorder}">
+          <span style="color:${scheme.pathColor};font-weight:600;font-size:12px">4 degrees of separation</span><br>
+          <span style="color:${scheme.scorerColors[0]}">Ovechkin</span>
+          <span class="path-arrow" style="color:${scheme.pathColor}">&rarr;</span>
+          <span style="color:${scheme.goalieColors[0]}">Fleury</span>
+          <span class="path-arrow" style="color:${scheme.pathColor}">&rarr;</span>
+          <span style="color:${scheme.scorerColors[1]}">Crosby</span>
+          <span class="path-arrow" style="color:${scheme.pathColor}">&rarr;</span>
+          <span style="color:${scheme.goalieColors[1]}">Lundqvist</span>
+          <span class="path-arrow" style="color:${scheme.pathColor}">&rarr;</span>
+          <span style="color:${scheme.scorerColors[0]}">McDavid</span>
+        </div>
+        <div class="legend" style="background:${scheme.uiBg};border:1px solid ${scheme.uiBorder}">
+          <div class="legend-row"><div class="legend-dot" style="background:${scheme.scorerColors[0]}"></div><span style="color:${scheme.textMuted}">Scorer</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:${scheme.goalieColors[0]}"></div><span style="color:${scheme.textMuted}">Goalie</span></div>
+        </div>
+        <div class="timeline" style="background:${scheme.uiBg};border:1px solid ${scheme.uiBorder}">
+          <span style="color:${scheme.textMuted}">2010</span>
+          <div class="timeline-track" style="background:${scheme.gradientTrack}"></div>
+          <span style="color:${scheme.textMuted}">2026</span>
+        </div>
+      </div>
+    </div>
+    <div class="swatches" style="background:${scheme.uiBg}">
+      <div class="swatch" style="background:${scheme.bg}"></div>
+      <div class="swatch" style="background:${scheme.scorerColors[0]}"></div>
+      <div class="swatch" style="background:${scheme.scorerColors[2]}"></div>
+      <div class="swatch" style="background:${scheme.goalieColors[0]}"></div>
+      <div class="swatch" style="background:${scheme.goalieColors[2]}"></div>
+      <div class="swatch" style="background:${scheme.pathColor}"></div>
+      <div class="swatch" style="background:${scheme.edgeColor.replace('0.06','0.5').replace('0.05','0.5').replace('0.04','0.5').replace('0.035','0.5')}"></div>
+      <span class="swatch-label">bg &middot; scorer &middot; goalie &middot; path &middot; edge</span>
+    </div>
+  `;
+
+  grid.appendChild(mockup);
+  drawGraph(document.getElementById(`c${idx}`), scheme);
+});
+</script>
+</body>
+</html>

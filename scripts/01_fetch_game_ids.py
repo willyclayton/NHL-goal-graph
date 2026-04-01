@@ -11,6 +11,7 @@ import json
 import os
 import time
 from datetime import date, timedelta
+from typing import Optional, List, Dict
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -31,7 +32,7 @@ SCHEDULE_URL = "https://api-web.nhle.com/v1/schedule/{date}"
 RATE_LIMIT = 0.5  # seconds between requests
 
 
-def fetch_schedule(d: date) -> dict | None:
+def fetch_schedule(d: date) -> Optional[dict]:
     """Fetch schedule for a given date, with caching."""
     cache_path = os.path.join(RAW_DIR, f"{d.isoformat()}.json")
     if os.path.exists(cache_path):
@@ -51,7 +52,7 @@ def fetch_schedule(d: date) -> dict | None:
         return None
 
 
-def extract_game_ids(schedule_data: dict) -> list[int]:
+def extract_game_ids(schedule_data: dict) -> List[int]:
     """Extract regular season and playoff game IDs from schedule response."""
     ids = []
     for week in schedule_data.get("gameWeek", []):

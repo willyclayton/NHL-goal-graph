@@ -11,6 +11,7 @@ Runtime: ~5-6 hours at 1 req/sec
 import json
 import os
 import time
+from typing import Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -19,7 +20,7 @@ PBP_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "pbp")
 ERROR_LOG = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "fetch_errors.txt")
 
 PBP_URL = "https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
-RATE_LIMIT = 1.0  # seconds between requests
+RATE_LIMIT = 0.0  # no delay
 
 
 def fetch_pbp(game_id: str) -> bool:
@@ -38,7 +39,7 @@ def fetch_pbp(game_id: str) -> bool:
         with open(out_path, "wb") as f:
             f.write(data)
         return True
-    except (URLError, HTTPError, json.JSONDecodeError) as e:
+    except Exception as e:
         return False
 
 

@@ -29,6 +29,7 @@ import PathDisplay from "./PathDisplay";
 import SearchBar from "./SearchBar";
 import Timeline from "./Timeline";
 import Legend from "./Legend";
+import InfoDrawer from "./InfoDrawer";
 
 interface GraphProps {
   data: GraphData;
@@ -51,6 +52,13 @@ export default function Graph({ data }: GraphProps) {
   const [selectedB, setSelectedB] = useState<GraphNode | null>(null);
   const [path, setPath] = useState<string[] | null>(null);
   const [yearRange, setYearRange] = useState<[number, number]>([2010, 2026]);
+  const [drawerNode, setDrawerNode] = useState<GraphNode | null>(null);
+
+  // Refs that mirror state for the render loop (avoids stale closures)
+  const hoveredRef = useRef<GraphNode | null>(null);
+  const selectedARef = useRef<GraphNode | null>(null);
+  const selectedBRef = useRef<GraphNode | null>(null);
+  const pathRef = useRef<string[] | null>(null);
 
   // Build quadtree for hit testing
   const qtRef = useRef<Quadtree<GraphNode> | null>(null);
@@ -142,10 +150,11 @@ export default function Graph({ data }: GraphProps) {
     dirtyRef.current = true;
   }, [path]);
 
-  // Mark dirty on selection/hover changes
-  useEffect(() => {
-    dirtyRef.current = true;
-  }, [hoveredNode, selectedA, selectedB]);
+  // Sync refs and mark dirty on state changes
+  useEffect(() => { hoveredRef.current = hoveredNode; dirtyRef.current = true; }, [hoveredNode]);
+  useEffect(() => { selectedARef.current = selectedA; dirtyRef.current = true; }, [selectedA]);
+  useEffect(() => { selectedBRef.current = selectedB; dirtyRef.current = true; }, [selectedB]);
+  useEffect(() => { pathRef.current = path; dirtyRef.current = true; }, [path]);
 
   // Canvas setup + render loop
   useEffect(() => {
@@ -201,9 +210,10 @@ export default function Graph({ data }: GraphProps) {
       const pathNodes = pathSetRef.current;
       const pathEdges = pathEdgeSetRef.current;
       const hasPath = pathNodes.size > 0;
-      const hovered = hoveredNode;
-      const selA = selectedA;
-      const selB = selectedB;
+      const currentPath = pathRef.current;
+      const hovered = hoveredRef.current;
+      const selA = selectedARef.current;
+      const selB = selectedBRef.current;
 
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -261,14 +271,14 @@ export default function Graph({ data }: GraphProps) {
       }
 
       // --- Draw highlighted path edges ---
-      if (hasPath && path) {
+      if (hasPath && currentPath) {
         ctx.globalAlpha = PATH_ALPHA;
         ctx.strokeStyle = PATH_COLOR;
         ctx.lineWidth = PATH_WIDTH / k;
         ctx.beginPath();
-        for (let i = 0; i < path.length - 1; i++) {
-          const sn = data.nodeMap.get(path[i]);
-          const tn = data.nodeMap.get(path[i + 1]);
+        for (let i = 0; i < currentPath.length - 1; i++) {
+          const sn = data.nodeMap.get(currentPath[i]);
+          const tn = data.nodeMap.get(currentPath[i + 1]);
           if (!sn || !tn) continue;
           ctx.moveTo(sn.x * WORLD_WIDTH, sn.y * WORLD_HEIGHT);
           ctx.lineTo(tn.x * WORLD_WIDTH, tn.y * WORLD_HEIGHT);
@@ -411,18 +421,22 @@ export default function Graph({ data }: GraphProps) {
         setSelectedA(null);
         setSelectedB(null);
         setPath(null);
+        setDrawerNode(null);
         return;
       }
 
       if (!selectedA) {
         setSelectedA(found);
+        setDrawerNode(found);
       } else if (!selectedB && found.id !== selectedA.id) {
         setSelectedB(found);
+        setDrawerNode(null);
       } else {
         // Third click or same node — start fresh
         setSelectedA(found);
         setSelectedB(null);
         setPath(null);
+        setDrawerNode(found);
       }
     },
     [selectedA, selectedB]
@@ -433,12 +447,15 @@ export default function Graph({ data }: GraphProps) {
     (node: GraphNode) => {
       if (!selectedA) {
         setSelectedA(node);
+        setDrawerNode(node);
       } else if (!selectedB && node.id !== selectedA.id) {
         setSelectedB(node);
+        setDrawerNode(null);
       } else {
         setSelectedA(node);
         setSelectedB(null);
         setPath(null);
+        setDrawerNode(node);
       }
 
       // Zoom to node
@@ -464,6 +481,19 @@ export default function Graph({ data }: GraphProps) {
     setSelectedA(null);
     setSelectedB(null);
     setPath(null);
+    setDrawerNode(null);
+  }, []);
+
+  // MiniMap jump handler
+  const handleMiniMapJump = useCallback((worldX: number, worldY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>().scaleExtent([ZOOM_MIN, ZOOM_MAX]);
+    const currentK = transformRef.current.k;
+    const tx = window.innerWidth / 2 - worldX * currentK;
+    const ty = window.innerHeight / 2 - worldY * currentK;
+    const targetTransform = zoomIdentity.translate(tx, ty).scale(currentK);
+    select(canvas).transition().duration(500).call(zoomBehavior.transform, targetTransform);
   }, []);
 
   return (
@@ -478,7 +508,7 @@ export default function Graph({ data }: GraphProps) {
 
       <SearchBar nodes={data.nodes} onSelect={handleSelectNode} />
 
-      {hoveredNode && (
+      {hoveredNode && !drawerNode && (
         <PlayerTooltip node={hoveredNode} x={mousePos.x} y={mousePos.y} />
       )}
 
@@ -491,10 +521,21 @@ export default function Graph({ data }: GraphProps) {
         />
       )}
 
+      {drawerNode && !path && (
+        <InfoDrawer
+          node={drawerNode}
+          data={data}
+          transformRef={transformRef}
+          onClickNode={handleSelectNode}
+          onJump={handleMiniMapJump}
+          onClose={() => setDrawerNode(null)}
+        />
+      )}
+
       <Timeline yearRange={yearRange} onChange={setYearRange} />
       <Legend />
 
-      {selectedA && !selectedB && (
+      {selectedA && !selectedB && !drawerNode && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm pointer-events-none">
           Select a second player to find path
         </div>

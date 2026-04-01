@@ -38,7 +38,7 @@ export default function Timeline({ yearRange, onChange }: TimelineProps) {
       </span>
       <div className="flex-1 flex flex-col gap-1 relative">
         {/* Gradient track */}
-        <div className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-30" />
+        <div className="h-1.5 rounded-full bg-gradient-to-r from-amber-600 via-slate-500 to-sky-700 opacity-30" />
         <input
           type="range"
           min={YEAR_MIN}

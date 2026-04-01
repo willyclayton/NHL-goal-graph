@@ -22,7 +22,7 @@ export default function PlayerTooltip({ node, x, y }: PlayerTooltipProps) {
       <div className="flex items-center gap-2 mt-1 text-white/70">
         <span
           className={`inline-block w-2 h-2 rounded-full ${
-            node.type === "goalie" ? "bg-blue-400" : "bg-pink-400"
+            node.type === "goalie" ? "bg-amber-400" : "bg-sky-600"
           }`}
         />
         <span className="capitalize">{node.type}</span>

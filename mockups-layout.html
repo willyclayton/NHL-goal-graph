@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL Goal Graph — Layout Organization Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; color: #fff; font-family: Inter, system-ui, sans-serif; padding: 24px; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 8px; }
+  .subtitle { text-align: center; color: #888; font-size: 14px; margin-bottom: 48px; max-width: 600px; margin-left: auto; margin-right: auto; }
+  .grid { display: flex; flex-direction: column; gap: 56px; max-width: 1000px; margin: 0 auto; }
+  .mockup { border-radius: 16px; overflow: hidden; border: 1px solid #2a3040; }
+  .mockup-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.3); }
+  .mockup-header h2 { font-size: 15px; font-weight: 600; color: #c8d8e0; }
+  .mockup-header .num { font-size: 12px; color: #6aaab8; font-weight: 700; margin-right: 8px; }
+  .mockup-header .tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(106,170,184,0.15); color: #6aaab8; }
+  .mockup-desc { padding: 12px 18px; font-size: 12px; color: #888; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.03); line-height: 1.6; }
+
+  /* Shared canvas area */
+  .scene { position: relative; height: 460px; background: #0b1620; overflow: hidden; }
+  .graph-dots { position: absolute; inset: 0; }
+
+  /* Fake graph content */
+  .fake-node { position: absolute; border-radius: 50%; }
+  .fake-edge { position: absolute; height: 1px; background: rgba(138,188,210,0.06); transform-origin: left center; }
+
+  /* Panel styles shared */
+  .panel-bg { background: rgba(11,22,32,0.96); border: 1px solid rgba(106,170,184,0.1); backdrop-filter: blur(12px); }
+  .panel-section-title { font-size: 10px; color: rgba(200,216,224,0.3); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+  .panel-stat { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+  .panel-stat .k { color: rgba(200,216,224,0.45); }
+  .panel-stat .v { color: #e8d8c0; font-weight: 500; }
+  .panel-player-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; }
+  .panel-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .panel-name { color: #c8d8e0; flex: 1; }
+  .panel-val { color: #e8d8c0; font-weight: 500; }
+  .chip { font-size: 10px; padding: 2px 7px; border-radius: 5px; display: inline-block; margin: 1px; }
+  .chip-amber { background: rgba(217,149,106,0.1); color: #d9956a; }
+  .chip-blue { background: rgba(106,170,184,0.1); color: #6aaab8; }
+  .tab { padding: 6px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; color: rgba(200,216,224,0.4); }
+  .tab.active { background: rgba(106,170,184,0.1); color: #6aaab8; }
+  .avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0b1620; flex-shrink: 0; }
+  .minimap-box { width: 100%; aspect-ratio: 4/3; border-radius: 6px; background: rgba(0,0,0,0.4); position: relative; overflow: hidden; }
+  .minimap-vp { position: absolute; border: 1.5px solid #e8d8c0; border-radius: 2px; background: rgba(232,216,192,0.04); }
+
+  /* --- Layout 1: Right Sidebar --- */
+  .sidebar-r { position: absolute; top: 0; right: 0; bottom: 0; width: 280px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; border-left: 1px solid rgba(106,170,184,0.08); }
+  .sidebar-toggle { position: absolute; top: 12px; right: 12px; padding: 6px 12px; border-radius: 8px; font-size: 12px; color: rgba(200,216,224,0.5); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  /* --- Layout 2: Bottom Drawer --- */
+  .drawer { position: absolute; bottom: 0; left: 0; right: 0; height: 200px; display: grid; grid-template-columns: 1fr 1fr 1fr 160px; gap: 1px; background: rgba(106,170,184,0.06); border-top: 1px solid rgba(106,170,184,0.1); }
+  .drawer-section { padding: 12px 14px; overflow: hidden; }
+  .drawer-tab-bar { position: absolute; bottom: 200px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px; border-radius: 8px; }
+
+  /* --- Layout 3: Left Sidebar Tabs --- */
+  .sidebar-l { position: absolute; top: 0; left: 0; bottom: 0; width: 300px; display: flex; border-right: 1px solid rgba(106,170,184,0.08); }
+  .sidebar-tabs { width: 44px; display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; background: rgba(0,0,0,0.3); }
+  .sidebar-tab-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: rgba(200,216,224,0.3); font-size: 14px; }
+  .sidebar-tab-icon.active { background: rgba(106,170,184,0.1); color: #6aaab8; }
+  .sidebar-content { flex: 1; padding: 14px; overflow-y: auto; }
+
+  /* --- Layout 4: Floating Card Stack --- */
+  .card-stack { position: absolute; right: 14px; top: 14px; bottom: 60px; width: 260px; display: flex; flex-direction: column; gap: 8px; }
+  .card-collapsible { border-radius: 10px; overflow: hidden; }
+  .card-collapse-header { padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .card-collapse-header h4 { font-size: 12px; color: #c8d8e0; font-weight: 500; }
+  .card-collapse-arrow { font-size: 10px; color: rgba(200,216,224,0.3); }
+  .card-collapse-body { padding: 0 12px 10px; }
+
+  /* --- Layout 5: Command Bar --- */
+  .cmd-bar { position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%); width: 680px; max-width: 90vw; border-radius: 14px; display: flex; overflow: hidden; }
+  .cmd-section { padding: 12px 14px; flex: 1; border-right: 1px solid rgba(255,255,255,0.03); }
+  .cmd-section:last-child { border: none; }
+  .cmd-section.mini { flex: 0 0 140px; padding: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Layout Organization — Pick a Style</h1>
+<p class="subtitle">All 4 components (Player Card, Stats, Neighborhood, Mini Map) unified. Each mockup shows what it looks like with a player selected.</p>
+
+<div class="grid">
+
+<!-- 1. Right Sidebar -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">1</span> Right Sidebar</h2>
+    <span class="tag">Toggle with button or Tab key</span>
+  </div>
+  <div class="mockup-desc">
+    Single panel slides in from the right. All info stacked vertically — player card at top, neighborhood below, stats at bottom. Mini map embedded. One toggle button controls everything.
+  </div>
+  <div class="scene">
+    <!-- Toggle button (when closed) -->
+    <div class="sidebar-toggle panel-bg" style="right:292px;border-radius:8px 0 0 8px;border-right:none">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <span style="font-size:11px">Info</span>
+    </div>
+
+    <div class="sidebar-r panel-bg">
+      <!-- Player Card -->
+      <div style="display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div class="avatar" style="width:40px;height:40px;background:linear-gradient(135deg,#6aaab8,#3a6878);font-size:14px">AO</div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#c8d8e0">Alex Ovechkin</div>
+          <div style="font-size:11px;color:rgba(200,216,224,0.4)"><span style="color:#6aaab8">Scorer</span> · 2010–2025</div>
+        </div>
+      </div>
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="text-align:center;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)">
+          <div style="font-size:18px;font-weight:700;color:#e8d8c0">850</div>
+          <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goals</div>
+        </div>
+        <div style="text-align:center;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)">
+          <div style="font-size:18px;font-weight:700;color:#e8d8c0">147</div>
+          <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goalies</div>
+        </div>
+        <div style="text-align:center;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)">
+          <div style="font-size:18px;font-weight:700;color:#e8d8c0">2.1</div>
+          <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Avg Deg</div>
+        </div>
+      </div>
+      <!-- Neighborhood -->
+      <div>
+        <div class="panel-section-title">1 hop — 147 goalies</div>
+        <div><span class="chip chip-amber">Lundqvist</span><span class="chip chip-amber">Fleury</span><span class="chip chip-amber">Holtby</span><span class="chip chip-amber">Price</span><span class="chip chip-amber">Rask</span><span class="chip chip-amber" style="opacity:0.4">+142</span></div>
+      </div>
+      <div>
+        <div class="panel-section-title">2 hops — 4,200 scorers</div>
+        <div><span class="chip chip-blue" style="opacity:0.6">Crosby</span><span class="chip chip-blue" style="opacity:0.6">McDavid</span><span class="chip chip-blue" style="opacity:0.6">Kane</span><span class="chip chip-blue" style="opacity:0.4">+4,197</span></div>
+      </div>
+      <!-- Graph stats -->
+      <div style="border-top:1px solid rgba(255,255,255,0.04);padding-top:10px">
+        <div class="panel-section-title">Network</div>
+        <div class="panel-stat"><span class="k">Players</span><span class="v">5,847</span></div>
+        <div class="panel-stat"><span class="k">Connections</span><span class="v">21,450</span></div>
+        <div class="panel-stat"><span class="k">Avg. degree</span><span class="v">3.67</span></div>
+      </div>
+      <!-- Mini map -->
+      <div class="minimap-box">
+        <div class="minimap-vp" style="width:30%;height:35%;top:25%;left:40%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Bottom Drawer -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">2</span> Bottom Drawer</h2>
+    <span class="tag">Slide up on select, drag to resize</span>
+  </div>
+  <div class="mockup-desc">
+    Horizontal strip at the bottom — columns for player info, neighborhood, stats, and mini map side by side. Appears when a player is selected, can be dragged taller or dismissed. Graph stays full-width above.
+  </div>
+  <div class="scene">
+    <div class="drawer panel-bg">
+      <!-- Player -->
+      <div class="drawer-section" style="background:rgba(11,22,32,0.96)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div class="avatar" style="width:36px;height:36px;background:linear-gradient(135deg,#6aaab8,#3a6878);font-size:13px">AO</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#c8d8e0">Alex Ovechkin</div>
+            <div style="font-size:10px;color:rgba(200,216,224,0.4)"><span style="color:#6aaab8">Scorer</span> · LW · 2010–2025</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="padding:6px;border-radius:6px;background:rgba(255,255,255,0.02);text-align:center">
+            <div style="font-size:16px;font-weight:700;color:#e8d8c0">850</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goals</div>
+          </div>
+          <div style="padding:6px;border-radius:6px;background:rgba(255,255,255,0.02);text-align:center">
+            <div style="font-size:16px;font-weight:700;color:#e8d8c0">147</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Connections</div>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <div class="panel-section-title">Most scored on</div>
+          <div><span class="chip chip-amber">Lundqvist (42)</span><span class="chip chip-amber">Fleury (38)</span><span class="chip chip-amber">Holtby (35)</span></div>
+        </div>
+      </div>
+      <!-- Neighborhood -->
+      <div class="drawer-section" style="background:rgba(11,22,32,0.96)">
+        <div class="panel-section-title" style="margin-bottom:8px">Neighborhood</div>
+        <div class="panel-section-title">1 hop — 147 goalies</div>
+        <div style="margin-bottom:8px"><span class="chip chip-amber">Lundqvist</span><span class="chip chip-amber">Fleury</span><span class="chip chip-amber">Holtby</span><span class="chip chip-amber">Price</span><span class="chip chip-amber">Rask</span><span class="chip chip-amber">Bobrovsky</span><span class="chip chip-amber" style="opacity:0.4">+141</span></div>
+        <div class="panel-section-title">2 hops — 4,200 scorers</div>
+        <div><span class="chip chip-blue" style="opacity:0.6">Crosby</span><span class="chip chip-blue" style="opacity:0.6">McDavid</span><span class="chip chip-blue" style="opacity:0.6">Kane</span><span class="chip chip-blue" style="opacity:0.6">Malkin</span><span class="chip chip-blue" style="opacity:0.4">+4,196</span></div>
+      </div>
+      <!-- Stats -->
+      <div class="drawer-section" style="background:rgba(11,22,32,0.96)">
+        <div class="panel-section-title" style="margin-bottom:8px">Graph Stats</div>
+        <div class="panel-stat"><span class="k">Total players</span><span class="v">5,847</span></div>
+        <div class="panel-stat"><span class="k">Scorers</span><span class="v" style="color:#6aaab8">5,312</span></div>
+        <div class="panel-stat"><span class="k">Goalies</span><span class="v" style="color:#d9956a">435</span></div>
+        <div class="panel-stat"><span class="k">Connections</span><span class="v">21,450</span></div>
+        <div class="panel-stat"><span class="k">Avg. degree</span><span class="v">3.67</span></div>
+        <div style="margin-top:8px">
+          <div class="panel-section-title">Most connected</div>
+          <div class="panel-player-row"><div class="panel-dot" style="background:#d9956a"></div><span class="panel-name">Fleury</span><span class="panel-val">1,847</span></div>
+          <div class="panel-player-row"><div class="panel-dot" style="background:#d9956a"></div><span class="panel-name">Lundqvist</span><span class="panel-val">1,654</span></div>
+        </div>
+      </div>
+      <!-- Mini map -->
+      <div class="drawer-section cmd-section mini" style="background:rgba(11,22,32,0.96);display:flex;align-items:center;justify-content:center">
+        <div class="minimap-box" style="width:130px;height:100px">
+          <div class="minimap-vp" style="width:30%;height:35%;top:20%;left:35%"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Drag handle -->
+    <div style="position:absolute;bottom:200px;left:50%;transform:translateX(-50%);width:40px;height:4px;border-radius:2px;background:rgba(200,216,224,0.15);margin-bottom:6px"></div>
+  </div>
+</div>
+
+<!-- 3. Left Sidebar with Icon Tabs -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">3</span> Left Icon Tabs</h2>
+    <span class="tag">Always visible icon rail, click to expand</span>
+  </div>
+  <div class="mockup-desc">
+    Thin icon rail on the left edge — click an icon to expand that section. Only one section open at a time. Clicking the active icon collapses it back to just the rail. Graph shifts right when panel is open.
+  </div>
+  <div class="scene">
+    <div class="sidebar-l panel-bg">
+      <div class="sidebar-tabs">
+        <div class="sidebar-tab-icon active" title="Player">👤</div>
+        <div class="sidebar-tab-icon" title="Neighborhood">🔗</div>
+        <div class="sidebar-tab-icon" title="Stats">📊</div>
+        <div class="sidebar-tab-icon" title="Map">🗺</div>
+      </div>
+      <div class="sidebar-content">
+        <!-- Player section active -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div class="avatar" style="width:40px;height:40px;background:linear-gradient(135deg,#6aaab8,#3a6878);font-size:14px">AO</div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#c8d8e0">Alex Ovechkin</div>
+            <div style="font-size:11px;color:rgba(200,216,224,0.4)"><span style="color:#6aaab8">Scorer</span> · LW · 2010–2025</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:18px;font-weight:700;color:#e8d8c0">850</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goals</div>
+          </div>
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:18px;font-weight:700;color:#e8d8c0">147</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goalies</div>
+          </div>
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:18px;font-weight:700;color:#e8d8c0">2.1</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Avg Deg</div>
+          </div>
+        </div>
+        <div class="panel-section-title">Most scored on</div>
+        <div style="margin-bottom:14px"><span class="chip chip-amber">Lundqvist (42)</span><span class="chip chip-amber">Fleury (38)</span><span class="chip chip-amber">Holtby (35)</span><span class="chip chip-amber">Bobrovsky (31)</span><span class="chip chip-amber">Price (28)</span></div>
+        <div class="panel-section-title">1 hop — 147 goalies</div>
+        <div><span class="chip chip-amber">Lundqvist</span><span class="chip chip-amber">Fleury</span><span class="chip chip-amber">Holtby</span><span class="chip chip-amber">Price</span><span class="chip chip-amber">Rask</span><span class="chip chip-amber" style="opacity:0.4">+142</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Collapsible Card Stack -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">4</span> Collapsible Card Stack</h2>
+    <span class="tag">Accordion on the right, master toggle</span>
+  </div>
+  <div class="mockup-desc">
+    Floating cards on the right side — each section is an accordion you can expand/collapse independently. Master toggle button (Tab or 'i') shows/hides the entire stack. Compact when collapsed, detailed when expanded.
+  </div>
+  <div class="scene">
+    <!-- Master toggle -->
+    <div class="panel-bg" style="position:absolute;top:12px;right:12px;padding:6px 12px;border-radius:8px;font-size:11px;color:rgba(200,216,224,0.5);display:flex;align-items:center;gap:6px;z-index:2">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Panel <kbd style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:4px;font-family:monospace">Tab</kbd>
+    </div>
+
+    <div class="card-stack" style="top:48px">
+      <!-- Player (expanded) -->
+      <div class="card-collapsible panel-bg">
+        <div class="card-collapse-header">
+          <h4>👤 Alex Ovechkin</h4>
+          <span class="card-collapse-arrow">▼</span>
+        </div>
+        <div class="card-collapse-body">
+          <div style="display:flex;gap:12px;margin-bottom:8px">
+            <div style="font-size:11px"><span style="color:rgba(200,216,224,0.4)">Goals</span> <span style="color:#e8d8c0;font-weight:600">850</span></div>
+            <div style="font-size:11px"><span style="color:rgba(200,216,224,0.4)">Connections</span> <span style="color:#e8d8c0;font-weight:600">147</span></div>
+            <div style="font-size:11px"><span style="color:rgba(200,216,224,0.4)">Years</span> <span style="color:#e8d8c0;font-weight:600">2010–25</span></div>
+          </div>
+          <div><span class="chip chip-amber">Lundqvist (42)</span><span class="chip chip-amber">Fleury (38)</span><span class="chip chip-amber">Holtby (35)</span></div>
+        </div>
+      </div>
+      <!-- Neighborhood (expanded) -->
+      <div class="card-collapsible panel-bg">
+        <div class="card-collapse-header">
+          <h4>🔗 Neighborhood</h4>
+          <span class="card-collapse-arrow">▼</span>
+        </div>
+        <div class="card-collapse-body">
+          <div class="panel-section-title">1 hop — 147 goalies</div>
+          <div style="margin-bottom:6px"><span class="chip chip-amber">Lundqvist</span><span class="chip chip-amber">Fleury</span><span class="chip chip-amber">Holtby</span><span class="chip chip-amber">Price</span><span class="chip chip-amber" style="opacity:0.4">+143</span></div>
+          <div class="panel-section-title">2 hops — 4,200 scorers</div>
+          <div><span class="chip chip-blue" style="opacity:0.6">Crosby</span><span class="chip chip-blue" style="opacity:0.6">McDavid</span><span class="chip chip-blue" style="opacity:0.4">+4,198</span></div>
+        </div>
+      </div>
+      <!-- Stats (collapsed) -->
+      <div class="card-collapsible panel-bg">
+        <div class="card-collapse-header">
+          <h4>📊 Stats</h4>
+          <span class="card-collapse-arrow" style="transform:rotate(-90deg)">▼</span>
+        </div>
+      </div>
+      <!-- Mini map (collapsed to tiny preview) -->
+      <div class="card-collapsible panel-bg">
+        <div class="card-collapse-header">
+          <h4>🗺 Map</h4>
+          <span class="card-collapse-arrow" style="transform:rotate(-90deg)">▼</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Split: Persistent Mini Bar + Expandable Overlay -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">5</span> Persistent Bar + Expand</h2>
+    <span class="tag">Compact bar always visible, click to expand</span>
+  </div>
+  <div class="mockup-desc">
+    Thin persistent bar at the top shows the selected player name + key stats in one line. Click the bar (or press Tab) to expand into a full overlay with all details. Mini map stays in bottom-left corner independently. Unobtrusive by default, rich when you want it.
+  </div>
+  <div class="scene">
+    <!-- Persistent top bar (compact) -->
+    <div class="panel-bg" style="position:absolute;top:0;left:0;right:0;height:42px;display:flex;align-items:center;padding:0 16px;gap:16px;border-radius:0;border-top:none;border-left:none;border-right:none;z-index:2;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="avatar" style="width:26px;height:26px;background:linear-gradient(135deg,#6aaab8,#3a6878);font-size:9px">AO</div>
+        <span style="font-size:13px;font-weight:600;color:#c8d8e0">Alex Ovechkin</span>
+        <span style="font-size:11px;color:#6aaab8">Scorer</span>
+      </div>
+      <div style="display:flex;gap:12px;font-size:11px">
+        <span><span style="color:rgba(200,216,224,0.4)">Goals</span> <span style="color:#e8d8c0;font-weight:600">850</span></span>
+        <span><span style="color:rgba(200,216,224,0.4)">Connections</span> <span style="color:#e8d8c0;font-weight:600">147</span></span>
+        <span><span style="color:rgba(200,216,224,0.4)">Avg Deg</span> <span style="color:#e8d8c0;font-weight:600">2.1</span></span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(200,216,224,0.3)">
+        Click to expand
+        <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+    </div>
+
+    <!-- Expanded state (shown below bar as overlay) -->
+    <div class="panel-bg" style="position:absolute;top:42px;left:0;right:0;padding:16px 20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;border-radius:0;border-left:none;border-right:none;border-top:1px solid rgba(255,255,255,0.03);z-index:2">
+      <!-- Col 1: Player detail -->
+      <div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:20px;font-weight:700;color:#e8d8c0">850</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goals</div>
+          </div>
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:20px;font-weight:700;color:#e8d8c0">147</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Goalies</div>
+          </div>
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:20px;font-weight:700;color:#e8d8c0">2.1</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.3);text-transform:uppercase">Avg Deg</div>
+          </div>
+        </div>
+        <div class="panel-section-title">Most scored on</div>
+        <div><span class="chip chip-amber">Lundqvist (42)</span><span class="chip chip-amber">Fleury (38)</span><span class="chip chip-amber">Holtby (35)</span><span class="chip chip-amber">Bobrovsky (31)</span></div>
+      </div>
+      <!-- Col 2: Neighborhood -->
+      <div>
+        <div class="panel-section-title" style="margin-bottom:8px">Neighborhood</div>
+        <div class="panel-section-title">1 hop — 147 goalies</div>
+        <div style="margin-bottom:8px"><span class="chip chip-amber">Lundqvist</span><span class="chip chip-amber">Fleury</span><span class="chip chip-amber">Holtby</span><span class="chip chip-amber">Price</span><span class="chip chip-amber">Rask</span><span class="chip chip-amber" style="opacity:0.4">+142</span></div>
+        <div class="panel-section-title">2 hops — 4,200 scorers</div>
+        <div><span class="chip chip-blue" style="opacity:0.6">Crosby</span><span class="chip chip-blue" style="opacity:0.6">McDavid</span><span class="chip chip-blue" style="opacity:0.6">Kane</span><span class="chip chip-blue" style="opacity:0.4">+4,197</span></div>
+      </div>
+      <!-- Col 3: Stats -->
+      <div>
+        <div class="panel-section-title" style="margin-bottom:8px">Network</div>
+        <div class="panel-stat"><span class="k">Total players</span><span class="v">5,847</span></div>
+        <div class="panel-stat"><span class="k">Scorers</span><span class="v" style="color:#6aaab8">5,312</span></div>
+        <div class="panel-stat"><span class="k">Goalies</span><span class="v" style="color:#d9956a">435</span></div>
+        <div class="panel-stat"><span class="k">Connections</span><span class="v">21,450</span></div>
+        <div style="margin-top:10px">
+          <div class="panel-section-title">Most connected</div>
+          <div class="panel-player-row"><div class="panel-dot" style="background:#d9956a"></div><span class="panel-name">Fleury</span><span class="panel-val">1,847</span></div>
+          <div class="panel-player-row"><div class="panel-dot" style="background:#d9956a"></div><span class="panel-name">Lundqvist</span><span class="panel-val">1,654</span></div>
+          <div class="panel-player-row"><div class="panel-dot" style="background:#6aaab8"></div><span class="panel-name">Ovechkin</span><span class="panel-val">147</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini map independent -->
+    <div class="panel-bg" style="position:absolute;bottom:12px;left:12px;border-radius:8px;overflow:hidden;width:140px">
+      <div class="minimap-box" style="height:100px">
+        <div class="minimap-vp" style="width:30%;height:35%;top:25%;left:40%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

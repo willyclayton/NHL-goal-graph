@@ -12,6 +12,7 @@ import csv
 import json
 import os
 import time
+from typing import Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -23,7 +24,7 @@ PLAYER_URL = "https://api-web.nhle.com/v1/player/{player_id}/landing"
 RATE_LIMIT = 0.5
 
 
-def fetch_player(player_id: str) -> dict | None:
+def fetch_player(player_id: str) -> Optional[dict]:
     """Fetch and cache player info. Returns parsed data or None."""
     cache_path = os.path.join(PLAYERS_DIR, f"{player_id}.json")
     if os.path.exists(cache_path):

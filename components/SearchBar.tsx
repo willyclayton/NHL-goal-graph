@@ -106,7 +106,7 @@ export default function SearchBar({ nodes, onSelect }: SearchBarProps) {
                     >
                       <span
                         className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                          node.type === "goalie" ? "bg-blue-400" : "bg-pink-400"
+                          node.type === "goalie" ? "bg-amber-400" : "bg-sky-600"
                         }`}
                       />
                       <div className="min-w-0">
