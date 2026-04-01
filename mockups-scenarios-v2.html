@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL Goal Graph — Sidebar Mockups v2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; color: #fff; font-family: Inter, system-ui, sans-serif; padding: 24px; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 8px; }
+  .subtitle { text-align: center; color: #888; font-size: 14px; margin-bottom: 48px; max-width: 700px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+  .grid { display: flex; flex-direction: column; gap: 56px; max-width: 1100px; margin: 0 auto; }
+  .mockup { border-radius: 16px; overflow: hidden; border: 1px solid #2a3040; }
+  .mockup-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.3); }
+  .mockup-header h2 { font-size: 15px; font-weight: 600; color: #c8d8e0; }
+  .mockup-header .num { font-size: 12px; color: #6aaab8; font-weight: 700; margin-right: 8px; }
+  .mockup-header .tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(106,170,184,0.15); color: #6aaab8; }
+  .mockup-desc { padding: 12px 18px; font-size: 12px; color: #888; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.03); line-height: 1.6; }
+
+  .scene { position: relative; height: 580px; background: #0b1620; overflow: hidden; }
+
+  /* Shared */
+  .panel-bg { background: rgba(11,22,32,0.96); border: 1px solid rgba(106,170,184,0.1); backdrop-filter: blur(12px); }
+  .section-title { font-size: 10px; color: rgba(200,216,224,0.28); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+  .amber { color: #d9956a; }
+  .blue { color: #6aaab8; }
+  .cream { color: #e8d8c0; }
+  .muted { color: rgba(200,216,224,0.35); }
+  .divider { height: 1px; background: rgba(255,255,255,0.03); }
+
+  .tab-bar { display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .tab { flex: 1; text-align: center; padding: 10px; font-size: 11px; color: rgba(200,216,224,0.3); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .tab:hover { color: rgba(200,216,224,0.5); }
+  .tab.active { color: #6aaab8; border-bottom-color: #6aaab8; }
+
+  .input-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 9px 11px; font-size: 12px; color: #c8d8e0; width: 100%; }
+  .input-box::placeholder { color: rgba(200,216,224,0.2); }
+  .input-box.focused { border-color: rgba(106,170,184,0.3); background: rgba(106,170,184,0.04); }
+
+  .btn { border-radius: 8px; padding: 8px 14px; font-size: 11px; cursor: pointer; text-align: center; transition: all 0.15s; }
+  .btn-primary { background: rgba(106,170,184,0.15); border: 1px solid rgba(106,170,184,0.2); color: #6aaab8; }
+  .btn-primary:hover { background: rgba(106,170,184,0.25); }
+  .btn-ghost { background: none; border: 1px solid rgba(255,255,255,0.06); color: rgba(200,216,224,0.4); }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.12); color: rgba(200,216,224,0.6); }
+
+  .chip { font-size: 10px; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s; display: inline-block; margin: 2px; }
+  .chip-on { background: rgba(106,170,184,0.15); color: #6aaab8; }
+  .chip-off { background: rgba(255,255,255,0.03); color: rgba(200,216,224,0.25); }
+  .chip-off:hover { color: rgba(200,216,224,0.45); background: rgba(255,255,255,0.05); }
+
+  .scenario-card { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+  .scenario-card:hover { background: rgba(106,170,184,0.05); }
+  .scenario-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  .scenario-card h4 { font-size: 12px; color: #c8d8e0; font-weight: 500; }
+  .scenario-card p { font-size: 10px; color: rgba(200,216,224,0.3); margin-top: 1px; }
+
+  .result-box { margin: 8px 0; padding: 10px 12px; border-radius: 8px; background: rgba(232,216,192,0.04); border: 1px solid rgba(232,216,192,0.08); }
+  .result-path { font-size: 12px; text-align: center; line-height: 1.8; }
+  .result-meta { font-size: 10px; color: rgba(200,216,224,0.3); text-align: center; margin-top: 3px; }
+
+  .lb-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
+  .lb-rank { color: rgba(200,216,224,0.15); width: 14px; text-align: right; font-size: 10px; }
+  .lb-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .lb-name { color: #c8d8e0; flex: 1; }
+  .lb-val { color: #e8d8c0; font-weight: 500; font-size: 10px; }
+
+  /* Sidebar specific */
+  .sidebar { position: absolute; top: 0; right: 0; bottom: 0; width: 310px; border-left: 1px solid rgba(106,170,184,0.08); overflow-y: auto; display: flex; flex-direction: column; }
+  .sidebar-section { padding: 12px 14px; }
+  .sidebar-toggle { position: absolute; top: 12px; right: 322px; padding: 6px 10px; border-radius: 8px 0 0 8px; font-size: 11px; color: rgba(200,216,224,0.4); display: flex; align-items: center; gap: 5px; cursor: pointer; border-right: none; }
+
+  /* Graph area hint */
+  .graph-hint { position: absolute; top: 50%; left: calc(50% - 155px); transform: translate(-50%, -50%); text-align: center; }
+  .graph-hint-text { font-size: 12px; color: rgba(200,216,224,0.12); }
+
+  /* Player input with clear */
+  .player-input { display: flex; align-items: center; gap: 8px; padding: 9px 11px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; }
+  .player-input .letter { font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .player-input .name { font-size: 12px; flex: 1; }
+  .player-input .clear { font-size: 10px; color: rgba(200,216,224,0.2); cursor: pointer; padding: 2px; }
+  .player-input .clear:hover { color: rgba(200,216,224,0.5); }
+
+  /* Swap button */
+  .swap-btn { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(200,216,224,0.25); cursor: pointer; margin: 0 auto; }
+  .swap-btn:hover { background: rgba(106,170,184,0.1); color: #6aaab8; }
+</style>
+</head>
+<body>
+
+<h1>Sidebar v2 — Combined Mockups</h1>
+<p class="subtitle">Merging your picks: tabbed sidebar (#9), scenario cards (#1), and dual player picker (#2). Five variations on how to combine them into one cohesive panel.</p>
+
+<div class="grid">
+
+<!-- A: Tabs with Scenarios as Home -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">A</span> Scenarios Home + Path Tab</h2>
+    <span class="tag">Scenario cards are the default landing</span>
+  </div>
+  <div class="mockup-desc">The "Explore" tab is the home screen showing scenario cards. Click one to enter that mode (e.g. clicking "Find Path" switches to the Path tab with the dual picker). Clean entry point for new users.</div>
+  <div class="scene">
+    <div class="graph-hint"><div class="graph-hint-text">← Graph canvas here →</div></div>
+    <div class="sidebar-toggle panel-bg">☰ Menu</div>
+    <div class="sidebar panel-bg">
+      <div class="tab-bar">
+        <div class="tab active">Explore</div>
+        <div class="tab">Path</div>
+        <div class="tab">Stats</div>
+      </div>
+
+      <!-- Explore tab (active) -->
+      <div class="sidebar-section">
+        <div class="section-title" style="margin-bottom:8px">What do you want to do?</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div class="scenario-card">
+            <div class="scenario-icon" style="background:rgba(106,170,184,0.08)">🔍</div>
+            <div><h4>Find a Path</h4><p>Connect any two players</p></div>
+          </div>
+          <div class="scenario-card">
+            <div class="scenario-icon" style="background:rgba(217,149,106,0.08)">🎲</div>
+            <div><h4>Random Path</h4><p>Surprise me with a connection</p></div>
+          </div>
+          <div class="scenario-card">
+            <div class="scenario-icon" style="background:rgba(232,216,192,0.06)">🎯</div>
+            <div><h4>Degree Challenge</h4><p>Find a pair with exactly N° separation</p></div>
+          </div>
+          <div class="scenario-card">
+            <div class="scenario-icon" style="background:rgba(106,170,184,0.08)">⭐</div>
+            <div><h4>Hub Players</h4><p>Most connected players in the graph</p></div>
+          </div>
+          <div class="scenario-card">
+            <div class="scenario-icon" style="background:rgba(217,149,106,0.08)">📅</div>
+            <div><h4>Time Machine</h4><p>Filter by era or decade</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <div class="section-title">Recent Paths</div>
+        <div style="font-size:11px;color:rgba(200,216,224,0.2);padding:4px 0">
+          <div style="margin-bottom:4px"><span class="blue">Ovechkin</span> → <span class="amber">Fleury</span> → <span class="blue">McDavid</span> <span class="cream" style="font-size:10px">(2°)</span></div>
+          <div><span class="blue">Crosby</span> → <span class="amber">Lundqvist</span> → <span class="blue">Zibanejad</span> <span class="cream" style="font-size:10px">(2°)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- B: Path Tab Active -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">B</span> Path Tab (after clicking "Find a Path")</h2>
+    <span class="tag">Dual picker + result</span>
+  </div>
+  <div class="mockup-desc">What you see after selecting "Find a Path" from the Explore tab, or clicking the Path tab directly. Dual player picker with swap, random buttons, and result preview. Back arrow returns to Explore.</div>
+  <div class="scene">
+    <div class="graph-hint"><div class="graph-hint-text">← Graph canvas here →</div></div>
+    <div class="sidebar panel-bg">
+      <div class="tab-bar">
+        <div class="tab">Explore</div>
+        <div class="tab active">Path</div>
+        <div class="tab">Stats</div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-title" style="margin-bottom:8px">Player A</div>
+        <div class="player-input focused">
+          <div class="letter" style="background:rgba(106,170,184,0.15);color:#6aaab8">A</div>
+          <div class="name" style="color:#c8d8e0">Alex Ovechkin</div>
+          <div class="clear">✕</div>
+        </div>
+      </div>
+
+      <div style="padding:0 14px"><div class="swap-btn">↕</div></div>
+
+      <div class="sidebar-section" style="padding-top:4px">
+        <div class="section-title" style="margin-bottom:8px">Player B</div>
+        <div class="player-input">
+          <div class="letter" style="background:rgba(217,149,106,0.15);color:#d9956a">B</div>
+          <div class="name" style="color:#c8d8e0">Connor McDavid</div>
+          <div class="clear">✕</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section" style="padding-top:4px">
+        <div style="display:flex;gap:6px">
+          <div class="btn btn-primary" style="flex:1">Find Path</div>
+          <div class="btn btn-ghost">🎲 Random</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Result -->
+      <div class="sidebar-section">
+        <div class="section-title">Result</div>
+        <div class="result-box">
+          <div class="result-path">
+            <span class="blue">Ovechkin</span>
+            <span class="cream"> → </span>
+            <span class="amber">Fleury</span>
+            <span class="cream"> → </span>
+            <span class="blue">McDavid</span>
+          </div>
+          <div class="result-meta">2 degrees of separation</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Path details -->
+      <div class="sidebar-section">
+        <div class="section-title">Path Players</div>
+        <div class="lb-row"><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Alex Ovechkin</span><span class="lb-val blue">Scorer · 850 G</span></div>
+        <div class="lb-row"><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Marc-Andre Fleury</span><span class="lb-val amber">Goalie · 2,400 GA</span></div>
+        <div class="lb-row"><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Connor McDavid</span><span class="lb-val blue">Scorer · 335 G</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- C: Degree Challenge Active -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">C</span> Degree Challenge (from Explore)</h2>
+    <span class="tag">Gamified mode</span>
+  </div>
+  <div class="mockup-desc">What you see after clicking "Degree Challenge" from the Explore tab. Pick a target degree, hit find, see results. Can keep hitting "Find Another" to discover more pairs.</div>
+  <div class="scene">
+    <div class="graph-hint"><div class="graph-hint-text">← Graph canvas here →</div></div>
+    <div class="sidebar panel-bg">
+      <div class="tab-bar">
+        <div class="tab active">Explore</div>
+        <div class="tab">Path</div>
+        <div class="tab">Stats</div>
+      </div>
+
+      <!-- Breadcrumb -->
+      <div style="padding:10px 14px;font-size:11px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,255,255,0.03)">
+        <span style="color:rgba(200,216,224,0.25);cursor:pointer">← Explore</span>
+        <span style="color:rgba(200,216,224,0.1)">/</span>
+        <span style="color:#6aaab8">Degree Challenge</span>
+      </div>
+
+      <div class="sidebar-section">
+        <div style="text-align:center;margin-bottom:12px">
+          <div style="font-size:11px;color:rgba(200,216,224,0.3);margin-bottom:8px">Find a pair with exactly</div>
+          <div style="display:flex;justify-content:center;gap:6px">
+            <span class="chip chip-off">1°</span>
+            <span class="chip chip-off">2°</span>
+            <span class="chip chip-on" style="font-size:12px;padding:6px 14px;font-weight:600">3°</span>
+            <span class="chip chip-off">4°</span>
+            <span class="chip chip-off">5+°</span>
+          </div>
+          <div style="font-size:10px;color:rgba(200,216,224,0.2);margin-top:6px">degrees of separation</div>
+        </div>
+        <div class="btn btn-primary" style="width:100%">🎯 Find a 3° Pair</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <div class="section-title">Found!</div>
+        <div class="result-box">
+          <div class="result-path">
+            <span class="blue">Zack Kassian</span>
+            <span class="cream"> → </span>
+            <span class="amber">Mike Smith</span>
+            <span class="cream"> → </span>
+            <span class="blue">Cody Eakin</span>
+            <span class="cream"> → </span>
+            <span class="amber">Bryzgalov</span>
+          </div>
+          <div class="result-meta">3 degrees · Different eras</div>
+        </div>
+        <div style="margin-top:8px">
+          <div class="btn btn-ghost" style="width:100%">🎯 Find Another</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <div class="section-title">Session Stats</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:18px;font-weight:700;color:#e8d8c0">7</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.25);text-transform:uppercase">Pairs found</div>
+          </div>
+          <div style="text-align:center;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:18px;font-weight:700;color:#e8d8c0">4°</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.25);text-transform:uppercase">Max found</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- D: Hub Players Active -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">D</span> Hub Players (from Explore)</h2>
+    <span class="tag">Leaderboard mode</span>
+  </div>
+  <div class="mockup-desc">What you see after clicking "Hub Players". Leaderboard of most connected, filterable by type. Click any player to highlight them on the graph.</div>
+  <div class="scene">
+    <div class="graph-hint"><div class="graph-hint-text">← Graph canvas here →</div></div>
+    <div class="sidebar panel-bg">
+      <div class="tab-bar">
+        <div class="tab active">Explore</div>
+        <div class="tab">Path</div>
+        <div class="tab">Stats</div>
+      </div>
+
+      <div style="padding:10px 14px;font-size:11px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,255,255,0.03)">
+        <span style="color:rgba(200,216,224,0.25);cursor:pointer">← Explore</span>
+        <span style="color:rgba(200,216,224,0.1)">/</span>
+        <span style="color:#6aaab8">Hub Players</span>
+      </div>
+
+      <div class="sidebar-section">
+        <div style="display:flex;gap:4px;margin-bottom:10px">
+          <span class="chip chip-on">All</span>
+          <span class="chip chip-off">Goalies</span>
+          <span class="chip chip-off">Scorers</span>
+        </div>
+
+        <div class="section-title">Most Connections</div>
+        <div class="lb-row"><span class="lb-rank">1</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Marc-Andre Fleury</span><span class="lb-val">1,847</span></div>
+        <div class="lb-row"><span class="lb-rank">2</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Henrik Lundqvist</span><span class="lb-val">1,654</span></div>
+        <div class="lb-row"><span class="lb-rank">3</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Carey Price</span><span class="lb-val">1,521</span></div>
+        <div class="lb-row"><span class="lb-rank">4</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Pekka Rinne</span><span class="lb-val">1,488</span></div>
+        <div class="lb-row"><span class="lb-rank">5</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Tuukka Rask</span><span class="lb-val">1,400</span></div>
+        <div class="lb-row"><span class="lb-rank">6</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Sergei Bobrovsky</span><span class="lb-val">1,380</span></div>
+        <div class="lb-row"><span class="lb-rank">7</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Jonathan Quick</span><span class="lb-val">1,312</span></div>
+
+        <div style="height:12px"></div>
+        <div class="section-title">Most Goals (Scorers)</div>
+        <div class="lb-row"><span class="lb-rank">1</span><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Alex Ovechkin</span><span class="lb-val">850</span></div>
+        <div class="lb-row"><span class="lb-rank">2</span><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Sidney Crosby</span><span class="lb-val">560</span></div>
+        <div class="lb-row"><span class="lb-rank">3</span><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Steven Stamkos</span><span class="lb-val">520</span></div>
+        <div class="lb-row"><span class="lb-rank">4</span><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Patrick Kane</span><span class="lb-val">480</span></div>
+        <div class="lb-row"><span class="lb-rank">5</span><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">Evgeni Malkin</span><span class="lb-val">440</span></div>
+      </div>
+
+      <div style="padding:6px 14px 12px;font-size:10px;color:rgba(200,216,224,0.15)">Click any player to highlight on graph</div>
+    </div>
+  </div>
+</div>
+
+<!-- E: Full Flow with all states -->
+<div class="mockup">
+  <div class="mockup-header">
+    <h2><span class="num">E</span> Stats Tab</h2>
+    <span class="tag">Graph overview + era filter</span>
+  </div>
+  <div class="mockup-desc">The Stats tab — network overview, era filter, and graph-level insights. Always available alongside the other tabs. Shows what the Time Machine scenario would look like as a permanent section.</div>
+  <div class="scene">
+    <div class="graph-hint"><div class="graph-hint-text">← Graph canvas here →</div></div>
+    <div class="sidebar panel-bg">
+      <div class="tab-bar">
+        <div class="tab">Explore</div>
+        <div class="tab">Path</div>
+        <div class="tab active">Stats</div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-title" style="margin-bottom:8px">Era Filter</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px">
+          <span class="chip chip-off">All Time</span>
+          <span class="chip chip-off">2010–14</span>
+          <span class="chip chip-on">2015–20</span>
+          <span class="chip chip-off">2020–26</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <input type="text" placeholder="From" style="width:50%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:6px 8px;font-size:11px;color:#c8d8e0;text-align:center;outline:none" value="2015">
+          <span style="color:rgba(200,216,224,0.15);line-height:30px">–</span>
+          <input type="text" placeholder="To" style="width:50%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:6px 8px;font-size:11px;color:#c8d8e0;text-align:center;outline:none" value="2020">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <div class="section-title" style="margin-bottom:6px">Network Overview</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div style="text-align:center;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:20px;font-weight:700;color:#e8d8c0">1,842</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.25);text-transform:uppercase">Players</div>
+          </div>
+          <div style="text-align:center;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02)">
+            <div style="font-size:20px;font-weight:700;color:#e8d8c0">38,420</div>
+            <div style="font-size:9px;color:rgba(200,216,224,0.25);text-transform:uppercase">Connections</div>
+          </div>
+        </div>
+        <div style="font-size:11px;display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;justify-content:space-between"><span class="muted">Scorers</span><span class="blue" style="font-weight:500">1,653</span></div>
+          <div style="display:flex;justify-content:space-between"><span class="muted">Goalies</span><span class="amber" style="font-weight:500">189</span></div>
+          <div style="display:flex;justify-content:space-between"><span class="muted">Avg. degree</span><span class="cream" style="font-weight:500">3.2</span></div>
+          <div style="display:flex;justify-content:space-between"><span class="muted">Avg. separation</span><span class="cream" style="font-weight:500">2.3°</span></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <div class="section-title" style="margin-bottom:6px">Degree Distribution</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:50px;padding:0 4px">
+          <div style="flex:1;background:rgba(106,170,184,0.2);border-radius:3px 3px 0 0;height:8%"></div>
+          <div style="flex:1;background:rgba(106,170,184,0.5);border-radius:3px 3px 0 0;height:82%"></div>
+          <div style="flex:1;background:rgba(106,170,184,0.35);border-radius:3px 3px 0 0;height:45%"></div>
+          <div style="flex:1;background:rgba(106,170,184,0.2);border-radius:3px 3px 0 0;height:12%"></div>
+          <div style="flex:1;background:rgba(106,170,184,0.1);border-radius:3px 3px 0 0;height:3%"></div>
+        </div>
+        <div style="display:flex;gap:3px;padding:2px 4px;font-size:9px;color:rgba(200,216,224,0.2)">
+          <span style="flex:1;text-align:center">1°</span>
+          <span style="flex:1;text-align:center">2°</span>
+          <span style="flex:1;text-align:center">3°</span>
+          <span style="flex:1;text-align:center">4°</span>
+          <span style="flex:1;text-align:center">5+°</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <div class="section-title" style="margin-bottom:6px">Top in Era</div>
+        <div class="lb-row"><span class="lb-rank">1</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Vasilevskiy</span><span class="lb-val">1,102 conn</span></div>
+        <div class="lb-row"><span class="lb-rank">2</span><div class="lb-dot" style="background:#d9956a"></div><span class="lb-name">Hellebuyck</span><span class="lb-val">980 conn</span></div>
+        <div class="lb-row"><span class="lb-rank">3</span><div class="lb-dot" style="background:#6aaab8"></div><span class="lb-name">McDavid</span><span class="lb-val">112 conn</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

@@ -22,12 +22,7 @@ import {
   WORLD_WIDTH,
   WORLD_HEIGHT,
 } from "@/lib/constants";
-import PathDisplay from "./PathDisplay";
-import SearchBar from "./SearchBar";
-import Timeline from "./Timeline";
-import Legend from "./Legend";
-import InfoDrawer from "./InfoDrawer";
-import RandomPathButton from "./RandomPathButton";
+import Sidebar from "./Sidebar";
 
 interface GraphProps {
   data: GraphData;
@@ -50,7 +45,6 @@ export default function Graph({ data }: GraphProps) {
   const [selectedB, setSelectedB] = useState<GraphNode | null>(null);
   const [path, setPath] = useState<string[] | null>(null);
   const [yearRange, setYearRange] = useState<[number, number]>([2010, 2026]);
-  const [drawerNode, setDrawerNode] = useState<GraphNode | null>(null);
 
   // Refs for render loop (avoids stale closures)
   const selectedARef = useRef<GraphNode | null>(null);
@@ -340,25 +334,27 @@ export default function Graph({ data }: GraphProps) {
         }
       }
 
-      // --- B2: Landmark labels (always visible, top 20) ---
+      // --- Labels ---
       if (nr) {
-        ctx.globalAlpha = 0.8;
-        const landmarkFontSize = Math.max(6, Math.min(14, 10 / k));
-        ctx.font = `600 ${landmarkFontSize}px Inter, system-ui, sans-serif`;
         ctx.fillStyle = "#ffffff";
         ctx.textBaseline = "middle";
 
-        for (const i of landmarkIndicesRef.current) {
-          if (!visibleSet.has(nr.ids[i])) continue;
-          const nx = nr.xs[i];
-          const ny = nr.ys[i];
-          if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
-          ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
-        }
+        if (k <= 2.5) {
+          // Low/mid zoom: only show landmark labels (top 20)
+          ctx.globalAlpha = 0.8;
+          const landmarkFontSize = Math.max(6, Math.min(14, 10 / k));
+          ctx.font = `600 ${landmarkFontSize}px Inter, system-ui, sans-serif`;
 
-        // Additional labels at high zoom (from pre-sorted list, early exit)
-        if (k > 2.5) {
-          ctx.globalAlpha = 0.7;
+          for (const i of landmarkIndicesRef.current) {
+            if (!visibleSet.has(nr.ids[i])) continue;
+            const nx = nr.xs[i];
+            const ny = nr.ys[i];
+            if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
+            ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
+          }
+        } else {
+          // High zoom: show top N in viewport (includes landmarks naturally)
+          ctx.globalAlpha = 0.85;
           const fontSize = Math.max(6, 10 / k);
           ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
           let labelCount = 0;
@@ -368,8 +364,6 @@ export default function Graph({ data }: GraphProps) {
             const nx = nr.xs[i];
             const ny = nr.ys[i];
             if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
-            // Skip landmarks (already drawn)
-            if (labelCount < LANDMARK_COUNT && landmarkIndicesRef.current.includes(i)) continue;
             ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
             labelCount++;
           }
@@ -405,42 +399,29 @@ export default function Graph({ data }: GraphProps) {
         setSelectedA(null);
         setSelectedB(null);
         setPath(null);
-        setDrawerNode(null);
         return;
       }
 
       if (!selectedA) {
         setSelectedA(found);
-        setDrawerNode(found);
       } else if (!selectedB && found.id !== selectedA.id) {
         setSelectedB(found);
-        setDrawerNode(null);
       } else {
         setSelectedA(found);
         setSelectedB(null);
         setPath(null);
-        setDrawerNode(found);
       }
     },
     [selectedA, selectedB]
   );
 
+  // Select a single node — zoom to it
   const handleSelectNode = useCallback(
     (node: GraphNode) => {
-      if (!selectedA) {
-        setSelectedA(node);
-        setDrawerNode(node);
-      } else if (!selectedB && node.id !== selectedA.id) {
-        setSelectedB(node);
-        setDrawerNode(null);
-      } else {
-        setSelectedA(node);
-        setSelectedB(null);
-        setPath(null);
-        setDrawerNode(node);
-      }
+      setSelectedA(node);
+      setSelectedB(null);
+      setPath(null);
 
-      // Zoom to node
       const canvas = canvasRef.current;
       if (!canvas) return;
       const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>().scaleExtent([ZOOM_MIN, ZOOM_MAX]);
@@ -451,22 +432,21 @@ export default function Graph({ data }: GraphProps) {
       const ty = window.innerHeight / 2 - ny * targetK;
       select(canvas).transition().duration(750).call(zoomBehavior.transform, zoomIdentity.translate(tx, ty).scale(targetK));
     },
-    [selectedA, selectedB]
+    []
   );
 
   const handleClearPath = useCallback(() => {
     setSelectedA(null);
     setSelectedB(null);
     setPath(null);
-    setDrawerNode(null);
   }, []);
 
-  const handleRandomPath = useCallback(
+  // Called from Sidebar when a path is found (random, degree challenge, or manual)
+  const handleSetPath = useCallback(
     (nodeA: GraphNode, nodeB: GraphNode, foundPath: string[]) => {
       setSelectedA(nodeA);
       setSelectedB(nodeB);
       setPath(foundPath);
-      setDrawerNode(null);
 
       // Zoom to show both nodes
       const canvas = canvasRef.current;
@@ -488,16 +468,6 @@ export default function Graph({ data }: GraphProps) {
     []
   );
 
-  const handleMiniMapJump = useCallback((worldX: number, worldY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>().scaleExtent([ZOOM_MIN, ZOOM_MAX]);
-    const currentK = transformRef.current.k;
-    const tx = window.innerWidth / 2 - worldX * currentK;
-    const ty = window.innerHeight / 2 - worldY * currentK;
-    select(canvas).transition().duration(500).call(zoomBehavior.transform, zoomIdentity.translate(tx, ty).scale(currentK));
-  }, []);
-
   return (
     <>
       <canvas
@@ -506,37 +476,17 @@ export default function Graph({ data }: GraphProps) {
         onClick={handleClick}
       />
 
-      <SearchBar nodes={data.nodes} onSelect={handleSelectNode} />
-      <RandomPathButton data={data} onPathFound={handleRandomPath} />
-
-      {path && path.length > 0 && (
-        <PathDisplay
-          path={path}
-          nodeMap={data.nodeMap}
-          onClickNode={handleSelectNode}
-          onClose={handleClearPath}
-        />
-      )}
-
-      {drawerNode && !path && (
-        <InfoDrawer
-          node={drawerNode}
-          data={data}
-          transformRef={transformRef}
-          onClickNode={handleSelectNode}
-          onJump={handleMiniMapJump}
-          onClose={() => setDrawerNode(null)}
-        />
-      )}
-
-      <Timeline yearRange={yearRange} onChange={setYearRange} />
-      <Legend />
-
-      {selectedA && !selectedB && !drawerNode && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm pointer-events-none">
-          Select a second player to find path
-        </div>
-      )}
+      <Sidebar
+        data={data}
+        selectedA={selectedA}
+        selectedB={selectedB}
+        path={path}
+        yearRange={yearRange}
+        onSelectNode={handleSelectNode}
+        onSetPath={handleSetPath}
+        onClearPath={handleClearPath}
+        onYearRangeChange={setYearRange}
+      />
     </>
   );
 }
