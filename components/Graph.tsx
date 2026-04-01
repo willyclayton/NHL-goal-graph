@@ -66,12 +66,28 @@ export default function Graph({ data }: GraphProps) {
   // Pre-compute node colors
   const nodeColorsRef = useRef<Map<string, string>>(new Map());
 
+  // Pre-baked edge coords: [sx, sy, tx, ty, sx, sy, tx, ty, ...] — avoids Map lookups per frame
+  const edgeCoordsRef = useRef<Float32Array>(new Float32Array(0));
+
+  // Pre-baked node render data for fast iteration
+  const nodeRenderRef = useRef<{
+    xs: Float32Array;
+    ys: Float32Array;
+    radii: Float32Array;
+    colors: string[];
+    ids: string[];
+    names: string[];
+    types: ("scorer" | "goalie")[];
+    counts: number[];
+  } | null>(null);
+
   // Visible nodes/edges based on timeline
   const visibleRef = useRef<{
     nodes: GraphNode[];
     edges: GraphEdge[];
     visibleSet: Set<string>;
-  }>({ nodes: data.nodes, edges: data.edges, visibleSet: new Set(data.nodes.map((n) => n.id)) });
+    edgeCoords: Float32Array;
+  }>({ nodes: data.nodes, edges: data.edges, visibleSet: new Set(data.nodes.map((n) => n.id)), edgeCoords: new Float32Array(0) });
 
   // Build edge lookup for highlighting
   const edgesByNodeRef = useRef<Map<string, Set<string>>>(new Map());
@@ -80,7 +96,7 @@ export default function Graph({ data }: GraphProps) {
     isMobileRef.current = "ontouchstart" in window || navigator.maxTouchPoints > 0;
   }, []);
 
-  // Pre-compute colors and edge lookup
+  // Pre-compute colors, edge lookup, and baked render data
   useEffect(() => {
     const colors = new Map<string, string>();
     for (const node of data.nodes) {
@@ -97,6 +113,43 @@ export default function Graph({ data }: GraphProps) {
       edgeMap.get(edge.target)?.add(edge.source);
     }
     edgesByNodeRef.current = edgeMap;
+
+    // Bake edge coordinates into flat array
+    const coords = new Float32Array(data.edges.length * 4);
+    let ci = 0;
+    for (const edge of data.edges) {
+      const sn = data.nodeMap.get(edge.source);
+      const tn = data.nodeMap.get(edge.target);
+      if (!sn || !tn) { ci += 4; continue; }
+      coords[ci++] = sn.x * WORLD_WIDTH;
+      coords[ci++] = sn.y * WORLD_HEIGHT;
+      coords[ci++] = tn.x * WORLD_WIDTH;
+      coords[ci++] = tn.y * WORLD_HEIGHT;
+    }
+    edgeCoordsRef.current = coords;
+
+    // Bake node render data
+    const n = data.nodes.length;
+    const xs = new Float32Array(n);
+    const ys = new Float32Array(n);
+    const radii = new Float32Array(n);
+    const nodeColors: string[] = new Array(n);
+    const ids: string[] = new Array(n);
+    const names: string[] = new Array(n);
+    const types: ("scorer" | "goalie")[] = new Array(n);
+    const counts: number[] = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const node = data.nodes[i];
+      xs[i] = node.x * WORLD_WIDTH;
+      ys[i] = node.y * WORLD_HEIGHT;
+      radii[i] = nodeRadius(node.count);
+      nodeColors[i] = colors.get(node.id) || "#ffffff";
+      ids[i] = node.id;
+      names[i] = node.name;
+      types[i] = node.type;
+      counts[i] = node.count;
+    }
+    nodeRenderRef.current = { xs, ys, radii, colors: nodeColors, ids, names, types, counts };
   }, [data]);
 
   // Update visible nodes/edges when yearRange changes
@@ -110,7 +163,21 @@ export default function Graph({ data }: GraphProps) {
     const edges = data.edges.filter(
       (e) => visibleSet.has(e.source) && visibleSet.has(e.target)
     );
-    visibleRef.current = { nodes, edges, visibleSet };
+
+    // Bake visible edge coords
+    const coords = new Float32Array(edges.length * 4);
+    let ci = 0;
+    for (const edge of edges) {
+      const sn = data.nodeMap.get(edge.source);
+      const tn = data.nodeMap.get(edge.target);
+      if (!sn || !tn) { ci += 4; continue; }
+      coords[ci++] = sn.x * WORLD_WIDTH;
+      coords[ci++] = sn.y * WORLD_HEIGHT;
+      coords[ci++] = tn.x * WORLD_WIDTH;
+      coords[ci++] = tn.y * WORLD_HEIGHT;
+    }
+
+    visibleRef.current = { nodes, edges, visibleSet, edgeCoords: coords };
 
     // Rebuild quadtree
     qtRef.current = quadtree<GraphNode>()
@@ -205,15 +272,15 @@ export default function Graph({ data }: GraphProps) {
 
       const t = transformRef.current;
       const k = t.k;
-      const { nodes, edges, visibleSet } = visibleRef.current;
+      const { nodes, edges, visibleSet, edgeCoords } = visibleRef.current;
       const isMobile = isMobileRef.current;
       const pathNodes = pathSetRef.current;
-      const pathEdges = pathEdgeSetRef.current;
       const hasPath = pathNodes.size > 0;
       const currentPath = pathRef.current;
       const hovered = hoveredRef.current;
       const selA = selectedARef.current;
       const selB = selectedBRef.current;
+      const nr = nodeRenderRef.current;
 
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -232,30 +299,30 @@ export default function Graph({ data }: GraphProps) {
       const vx1 = (width - t.x) / k;
       const vy1 = (height - t.y) / k;
 
-      // --- Draw edges ---
-      const skipEdges = isMobile && nodes.length > MOBILE_EDGE_CULL_NODE_THRESHOLD && k < 1;
+      // --- Draw edges (from pre-baked Float32Array) ---
+      // Skip edges at very low zoom with many edges — they're just visual noise
+      const edgeCount = edges.length;
+      const skipEdges = (isMobile && k < 1) || (edgeCount > 10000 && k < 0.5);
 
       if (!skipEdges) {
-        // Scale alpha based on edge count: low count = more visible, high count = subtle
-        const edgeAlpha = edges.length < 1000
-          ? Math.min(0.4, EDGE_ALPHA * (1000 / Math.max(1, edges.length)))
+        const edgeAlpha = edgeCount < 1000
+          ? Math.min(0.4, EDGE_ALPHA * (1000 / Math.max(1, edgeCount)))
           : EDGE_ALPHA;
         ctx.globalAlpha = edgeAlpha;
         ctx.strokeStyle = EDGE_COLOR;
         ctx.lineWidth = EDGE_WIDTH / k;
         ctx.beginPath();
 
-        for (const edge of edges) {
-          const sn = data.nodeMap.get(edge.source);
-          const tn = data.nodeMap.get(edge.target);
-          if (!sn || !tn) continue;
+        // Sample edges when zoomed out with many edges
+        const step = (edgeCount > 20000 && k < 1.5) ? 2 : 1;
 
-          const sx = sn.x * WORLD_WIDTH;
-          const sy = sn.y * WORLD_HEIGHT;
-          const tx = tn.x * WORLD_WIDTH;
-          const ty = tn.y * WORLD_HEIGHT;
+        for (let i = 0, len = edgeCount * 4; i < len; i += 4 * step) {
+          const sx = edgeCoords[i];
+          const sy = edgeCoords[i + 1];
+          const tx = edgeCoords[i + 2];
+          const ty = edgeCoords[i + 3];
 
-          // Frustum cull: skip if both endpoints outside viewport
+          // Frustum cull
           if (
             (sx < vx0 && tx < vx0) ||
             (sx > vx1 && tx > vx1) ||
@@ -263,7 +330,6 @@ export default function Graph({ data }: GraphProps) {
             (sy > vy1 && ty > vy1)
           ) continue;
 
-          // Dim non-path edges when path is active
           ctx.moveTo(sx, sy);
           ctx.lineTo(tx, ty);
         }
@@ -297,7 +363,7 @@ export default function Graph({ data }: GraphProps) {
           const hx = hovered.x * WORLD_WIDTH;
           const hy = hovered.y * WORLD_HEIGHT;
           for (const nid of connections) {
-            if (!visibleRef.current.visibleSet.has(nid)) continue;
+            if (!visibleSet.has(nid)) continue;
             const n = data.nodeMap.get(nid);
             if (!n) continue;
             ctx.moveTo(hx, hy);
@@ -307,62 +373,60 @@ export default function Graph({ data }: GraphProps) {
         }
       }
 
-      // --- Draw nodes ---
-      ctx.globalAlpha = 1;
-      for (const node of nodes) {
-        const nx = node.x * WORLD_WIDTH;
-        const ny = node.y * WORLD_HEIGHT;
+      // --- Draw nodes (from pre-baked arrays) ---
+      if (nr) {
+        const selAId = selA?.id;
+        const selBId = selB?.id;
+        const hovId = hovered?.id;
 
-        // Frustum cull
-        if (nx < vx0 - 10 || nx > vx1 + 10 || ny < vy0 - 10 || ny > vy1 + 10) continue;
+        for (let i = 0; i < nr.xs.length; i++) {
+          const id = nr.ids[i];
+          if (!visibleSet.has(id)) continue;
 
-        const r = nodeRadius(node.count);
-        const isOnPath = pathNodes.has(node.id);
-        const isSelected = node.id === selA?.id || node.id === selB?.id;
-        const isHovered = node.id === hovered?.id;
+          const nx = nr.xs[i];
+          const ny = nr.ys[i];
 
-        // Dim nodes when path is active (but not path nodes)
-        if (hasPath && !isOnPath) {
-          ctx.globalAlpha = 0.15;
-        } else {
-          ctx.globalAlpha = 1;
-        }
+          // Frustum cull
+          if (nx < vx0 - 10 || nx > vx1 + 10 || ny < vy0 - 10 || ny > vy1 + 10) continue;
 
-        ctx.fillStyle = nodeColorsRef.current.get(node.id) || "#ffffff";
-        ctx.beginPath();
-        ctx.arc(nx, ny, r, 0, Math.PI * 2);
-        ctx.fill();
+          const r = nr.radii[i];
+          const isOnPath = pathNodes.has(id);
+          const isSelected = id === selAId || id === selBId;
+          const isHovered = id === hovId;
 
-        // Highlight ring for selected/hovered/path nodes
-        if (isOnPath || isSelected || isHovered) {
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = isOnPath ? PATH_COLOR : isSelected ? "#ffffff" : "#ffffffcc";
-          ctx.lineWidth = (isOnPath ? 2 : 1.5) / k;
+          ctx.globalAlpha = (hasPath && !isOnPath) ? 0.15 : 1;
+          ctx.fillStyle = nr.colors[i];
           ctx.beginPath();
-          ctx.arc(nx, ny, r + 2 / k, 0, Math.PI * 2);
-          ctx.stroke();
+          ctx.arc(nx, ny, r, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (isOnPath || isSelected || isHovered) {
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = isOnPath ? PATH_COLOR : isSelected ? "#ffffff" : "#ffffffcc";
+            ctx.lineWidth = (isOnPath ? 2 : 1.5) / k;
+            ctx.beginPath();
+            ctx.arc(nx, ny, r + 2 / k, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
       }
 
       // --- Draw labels at high zoom ---
-      if (k > LABEL_ZOOM_THRESHOLD) {
+      if (k > LABEL_ZOOM_THRESHOLD && nr) {
         ctx.globalAlpha = 0.9;
         const fontSize = Math.max(8, 12 / k);
         ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
         ctx.fillStyle = "#ffffff";
         ctx.textBaseline = "middle";
-
-        // Only label nodes above a count threshold that scales with zoom
         const countThreshold = Math.max(1, Math.floor(30 / k));
 
-        for (const node of nodes) {
-          if (node.count < countThreshold) continue;
-          const nx = node.x * WORLD_WIDTH;
-          const ny = node.y * WORLD_HEIGHT;
+        for (let i = 0; i < nr.xs.length; i++) {
+          if (nr.counts[i] < countThreshold) continue;
+          if (!visibleSet.has(nr.ids[i])) continue;
+          const nx = nr.xs[i];
+          const ny = nr.ys[i];
           if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
-
-          const r = nodeRadius(node.count);
-          ctx.fillText(node.name, nx + r + 3 / k, ny);
+          ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
         }
       }
 
