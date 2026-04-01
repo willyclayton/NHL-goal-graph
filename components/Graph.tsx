@@ -4,14 +4,13 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import { zoom as d3Zoom, zoomIdentity, ZoomTransform } from "d3-zoom";
 import { select } from "d3-selection";
 import { quadtree, Quadtree } from "d3-quadtree";
-import type { GraphNode, GraphEdge, GraphData } from "@/lib/types";
+import type { GraphNode, GraphData } from "@/lib/types";
 import { nodeColor } from "@/lib/colors";
 import { bfs } from "@/lib/pathfinding";
 import {
   BG_COLOR,
   ZOOM_MIN,
   ZOOM_MAX,
-  LABEL_ZOOM_THRESHOLD,
   EDGE_ALPHA,
   EDGE_COLOR,
   EDGE_WIDTH,
@@ -22,9 +21,7 @@ import {
   NODE_RADIUS_SCALE,
   WORLD_WIDTH,
   WORLD_HEIGHT,
-  MOBILE_EDGE_CULL_NODE_THRESHOLD,
 } from "@/lib/constants";
-import PlayerTooltip from "./PlayerTooltip";
 import PathDisplay from "./PathDisplay";
 import SearchBar from "./SearchBar";
 import Timeline from "./Timeline";
@@ -39,37 +36,29 @@ function nodeRadius(count: number): number {
   return Math.max(NODE_MIN_RADIUS, Math.sqrt(count) * NODE_RADIUS_SCALE);
 }
 
+const LANDMARK_COUNT = 20;
+const MAX_LABELS_ZOOMED = 40;
+
 export default function Graph({ data }: GraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const transformRef = useRef<ZoomTransform>(zoomIdentity);
   const dirtyRef = useRef(true);
   const rafRef = useRef<number>(0);
-  const isMobileRef = useRef(false);
 
-  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [selectedA, setSelectedA] = useState<GraphNode | null>(null);
   const [selectedB, setSelectedB] = useState<GraphNode | null>(null);
   const [path, setPath] = useState<string[] | null>(null);
   const [yearRange, setYearRange] = useState<[number, number]>([2010, 2026]);
   const [drawerNode, setDrawerNode] = useState<GraphNode | null>(null);
 
-  // Refs that mirror state for the render loop (avoids stale closures)
-  const hoveredRef = useRef<GraphNode | null>(null);
+  // Refs for render loop (avoids stale closures)
   const selectedARef = useRef<GraphNode | null>(null);
   const selectedBRef = useRef<GraphNode | null>(null);
   const pathRef = useRef<string[] | null>(null);
 
-  // Build quadtree for hit testing
   const qtRef = useRef<Quadtree<GraphNode> | null>(null);
 
-  // Pre-compute node colors
-  const nodeColorsRef = useRef<Map<string, string>>(new Map());
-
-  // Pre-baked edge coords: [sx, sy, tx, ty, sx, sy, tx, ty, ...] — avoids Map lookups per frame
-  const edgeCoordsRef = useRef<Float32Array>(new Float32Array(0));
-
-  // Pre-baked node render data for fast iteration
+  // Pre-baked node render data
   const nodeRenderRef = useRef<{
     xs: Float32Array;
     ys: Float32Array;
@@ -77,58 +66,51 @@ export default function Graph({ data }: GraphProps) {
     colors: string[];
     ids: string[];
     names: string[];
-    types: ("scorer" | "goalie")[];
     counts: number[];
   } | null>(null);
 
-  // Visible nodes/edges based on timeline
-  const visibleRef = useRef<{
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-    visibleSet: Set<string>;
-    edgeCoords: Float32Array;
-  }>({ nodes: data.nodes, edges: data.edges, visibleSet: new Set(data.nodes.map((n) => n.id)), edgeCoords: new Float32Array(0) });
+  // Pre-sorted landmark indices (top N nodes by count, for always-visible labels)
+  const landmarkIndicesRef = useRef<number[]>([]);
 
-  // Build edge lookup for highlighting
+  // Pre-sorted all node indices by count descending (for zoomed-in labels)
+  const sortedByCountRef = useRef<number[]>([]);
+
+  // Visible set for timeline filtering
+  const visibleSetRef = useRef<Set<string>>(new Set());
+
+  // *** A1: Pre-rendered edge layer (offscreen canvas) ***
+  const edgeLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const edgeLayerDirtyRef = useRef(true);
+
+  // Path rendering
+  const pathSetRef = useRef<Set<string>>(new Set());
+  const pathCoordsRef = useRef<Float32Array>(new Float32Array(0));
+
+  // Adjacency for drawer
   const edgesByNodeRef = useRef<Map<string, Set<string>>>(new Map());
 
-  useEffect(() => {
-    isMobileRef.current = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-  }, []);
+  // Sync refs on state change
+  useEffect(() => { selectedARef.current = selectedA; dirtyRef.current = true; }, [selectedA]);
+  useEffect(() => { selectedBRef.current = selectedB; dirtyRef.current = true; }, [selectedB]);
+  useEffect(() => { pathRef.current = path; dirtyRef.current = true; }, [path]);
 
-  // Pre-compute colors, edge lookup, and baked render data
+  // Pre-compute all baked data on data load
   useEffect(() => {
     const colors = new Map<string, string>();
     for (const node of data.nodes) {
       colors.set(node.id, nodeColor(node.type, node.midYear));
     }
-    nodeColorsRef.current = colors;
 
+    // Edge lookup for drawer
     const edgeMap = new Map<string, Set<string>>();
-    for (const node of data.nodes) {
-      edgeMap.set(node.id, new Set());
-    }
+    for (const node of data.nodes) edgeMap.set(node.id, new Set());
     for (const edge of data.edges) {
       edgeMap.get(edge.source)?.add(edge.target);
       edgeMap.get(edge.target)?.add(edge.source);
     }
     edgesByNodeRef.current = edgeMap;
 
-    // Bake edge coordinates into flat array
-    const coords = new Float32Array(data.edges.length * 4);
-    let ci = 0;
-    for (const edge of data.edges) {
-      const sn = data.nodeMap.get(edge.source);
-      const tn = data.nodeMap.get(edge.target);
-      if (!sn || !tn) { ci += 4; continue; }
-      coords[ci++] = sn.x * WORLD_WIDTH;
-      coords[ci++] = sn.y * WORLD_HEIGHT;
-      coords[ci++] = tn.x * WORLD_WIDTH;
-      coords[ci++] = tn.y * WORLD_HEIGHT;
-    }
-    edgeCoordsRef.current = coords;
-
-    // Bake node render data
+    // Bake node render arrays
     const n = data.nodes.length;
     const xs = new Float32Array(n);
     const ys = new Float32Array(n);
@@ -136,7 +118,6 @@ export default function Graph({ data }: GraphProps) {
     const nodeColors: string[] = new Array(n);
     const ids: string[] = new Array(n);
     const names: string[] = new Array(n);
-    const types: ("scorer" | "goalie")[] = new Array(n);
     const counts: number[] = new Array(n);
     for (let i = 0; i < n; i++) {
       const node = data.nodes[i];
@@ -146,84 +127,96 @@ export default function Graph({ data }: GraphProps) {
       nodeColors[i] = colors.get(node.id) || "#ffffff";
       ids[i] = node.id;
       names[i] = node.name;
-      types[i] = node.type;
       counts[i] = node.count;
     }
-    nodeRenderRef.current = { xs, ys, radii, colors: nodeColors, ids, names, types, counts };
+    nodeRenderRef.current = { xs, ys, radii, colors: nodeColors, ids, names, counts };
+
+    // Pre-sort all indices by count descending
+    const sorted = Array.from({ length: n }, (_, i) => i);
+    sorted.sort((a, b) => counts[b] - counts[a]);
+    sortedByCountRef.current = sorted;
+    landmarkIndicesRef.current = sorted.slice(0, LANDMARK_COUNT);
+
+    // Create offscreen edge canvas
+    const offscreen = document.createElement("canvas");
+    offscreen.width = WORLD_WIDTH;
+    offscreen.height = WORLD_HEIGHT;
+    edgeLayerRef.current = offscreen;
+    edgeLayerDirtyRef.current = true;
   }, [data]);
 
-  // Update visible nodes/edges when yearRange changes
+  // Rebuild edge layer + visible set when yearRange changes (debounced effect)
   useEffect(() => {
     const visibleSet = new Set<string>();
-    const nodes = data.nodes.filter((n) => {
-      const visible = n.lastYear >= yearRange[0] && n.firstYear <= yearRange[1];
-      if (visible) visibleSet.add(n.id);
-      return visible;
-    });
-    const edges = data.edges.filter(
-      (e) => visibleSet.has(e.source) && visibleSet.has(e.target)
-    );
-
-    // Bake visible edge coords
-    const coords = new Float32Array(edges.length * 4);
-    let ci = 0;
-    for (const edge of edges) {
-      const sn = data.nodeMap.get(edge.source);
-      const tn = data.nodeMap.get(edge.target);
-      if (!sn || !tn) { ci += 4; continue; }
-      coords[ci++] = sn.x * WORLD_WIDTH;
-      coords[ci++] = sn.y * WORLD_HEIGHT;
-      coords[ci++] = tn.x * WORLD_WIDTH;
-      coords[ci++] = tn.y * WORLD_HEIGHT;
+    for (const n of data.nodes) {
+      if (n.lastYear >= yearRange[0] && n.firstYear <= yearRange[1]) {
+        visibleSet.add(n.id);
+      }
     }
-
-    visibleRef.current = { nodes, edges, visibleSet, edgeCoords: coords };
+    visibleSetRef.current = visibleSet;
 
     // Rebuild quadtree
+    const visible = data.nodes.filter((n) => visibleSet.has(n.id));
     qtRef.current = quadtree<GraphNode>()
       .x((d) => d.x * WORLD_WIDTH)
       .y((d) => d.y * WORLD_HEIGHT)
-      .addAll(nodes);
+      .addAll(visible);
+
+    // Render edges to offscreen canvas
+    const offscreen = edgeLayerRef.current;
+    if (offscreen) {
+      const ctx = offscreen.getContext("2d")!;
+      ctx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+      ctx.globalAlpha = EDGE_ALPHA;
+      ctx.strokeStyle = EDGE_COLOR;
+      ctx.lineWidth = EDGE_WIDTH;
+      ctx.beginPath();
+      for (const edge of data.edges) {
+        if (!visibleSet.has(edge.source) || !visibleSet.has(edge.target)) continue;
+        const sn = data.nodeMap.get(edge.source);
+        const tn = data.nodeMap.get(edge.target);
+        if (!sn || !tn) continue;
+        ctx.moveTo(sn.x * WORLD_WIDTH, sn.y * WORLD_HEIGHT);
+        ctx.lineTo(tn.x * WORLD_WIDTH, tn.y * WORLD_HEIGHT);
+      }
+      ctx.stroke();
+    }
 
     dirtyRef.current = true;
   }, [data, yearRange]);
 
-  // Run pathfinding when both players selected
+  // Pathfinding
   useEffect(() => {
     if (selectedA && selectedB) {
-      const result = bfs(selectedA.id, selectedB.id, data.adjacency);
-      setPath(result);
+      setPath(bfs(selectedA.id, selectedB.id, data.adjacency));
     } else {
       setPath(null);
     }
   }, [selectedA, selectedB, data.adjacency]);
 
-  // Path node set for rendering
-  const pathSetRef = useRef<Set<string>>(new Set());
-  const pathEdgeSetRef = useRef<Set<string>>(new Set());
-
+  // Pre-bake path data when path changes
   useEffect(() => {
     const nodeSet = new Set<string>();
-    const edgeSet = new Set<string>();
     if (path) {
       for (const id of path) nodeSet.add(id);
-      for (let i = 0; i < path.length - 1; i++) {
-        edgeSet.add(`${path[i]}-${path[i + 1]}`);
-        edgeSet.add(`${path[i + 1]}-${path[i]}`);
+      // Pre-bake path coordinates
+      const coords = new Float32Array(path.length * 2);
+      for (let i = 0; i < path.length; i++) {
+        const n = data.nodeMap.get(path[i]);
+        if (n) {
+          coords[i * 2] = n.x * WORLD_WIDTH;
+          coords[i * 2 + 1] = n.y * WORLD_HEIGHT;
+        }
       }
+      pathCoordsRef.current = coords;
+    } else {
+      pathCoordsRef.current = new Float32Array(0);
     }
     pathSetRef.current = nodeSet;
-    pathEdgeSetRef.current = edgeSet;
     dirtyRef.current = true;
-  }, [path]);
+  }, [path, data.nodeMap]);
 
-  // Sync refs and mark dirty on state changes
-  useEffect(() => { hoveredRef.current = hoveredNode; dirtyRef.current = true; }, [hoveredNode]);
-  useEffect(() => { selectedARef.current = selectedA; dirtyRef.current = true; }, [selectedA]);
-  useEffect(() => { selectedBRef.current = selectedB; dirtyRef.current = true; }, [selectedB]);
-  useEffect(() => { pathRef.current = path; dirtyRef.current = true; }, [path]);
-
-  // Canvas setup + render loop
+  // *** RENDER LOOP ***
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -246,7 +239,6 @@ export default function Graph({ data }: GraphProps) {
     resize();
     window.addEventListener("resize", resize);
 
-    // d3 zoom
     const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>()
       .scaleExtent([ZOOM_MIN, ZOOM_MAX])
       .on("zoom", (event) => {
@@ -256,12 +248,11 @@ export default function Graph({ data }: GraphProps) {
 
     select(canvas).call(zoomBehavior);
 
-    // Center the graph initially
+    // Center graph
     const initialK = Math.min(width / WORLD_WIDTH, height / WORLD_HEIGHT) * 0.9;
     const initialX = (width - WORLD_WIDTH * initialK) / 2;
     const initialY = (height - WORLD_HEIGHT * initialK) / 2;
-    const initialTransform = zoomIdentity.translate(initialX, initialY).scale(initialK);
-    select(canvas).call(zoomBehavior.transform, initialTransform);
+    select(canvas).call(zoomBehavior.transform, zoomIdentity.translate(initialX, initialY).scale(initialK));
 
     function render() {
       if (!dirtyRef.current) {
@@ -272,113 +263,50 @@ export default function Graph({ data }: GraphProps) {
 
       const t = transformRef.current;
       const k = t.k;
-      const { nodes, edges, visibleSet, edgeCoords } = visibleRef.current;
-      const isMobile = isMobileRef.current;
+      const nr = nodeRenderRef.current;
       const pathNodes = pathSetRef.current;
       const hasPath = pathNodes.size > 0;
-      const currentPath = pathRef.current;
-      const hovered = hoveredRef.current;
-      const selA = selectedARef.current;
-      const selB = selectedBRef.current;
-      const nr = nodeRenderRef.current;
+      const pCoords = pathCoordsRef.current;
+      const selAId = selectedARef.current?.id;
+      const selBId = selectedBRef.current?.id;
+      const visibleSet = visibleSetRef.current;
 
-      ctx.save();
+      // Set transform once (no save/restore overhead)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // Clear
       ctx.fillStyle = BG_COLOR;
       ctx.fillRect(0, 0, width, height);
 
-      // Apply zoom transform
-      ctx.translate(t.x, t.y);
-      ctx.scale(k, k);
-
-      // Viewport bounds in world coords (for frustum culling)
+      // Viewport in world coords
       const vx0 = -t.x / k;
       const vy0 = -t.y / k;
       const vx1 = (width - t.x) / k;
       const vy1 = (height - t.y) / k;
 
-      // --- Draw edges (from pre-baked Float32Array) ---
-      // Skip edges at very low zoom with many edges — they're just visual noise
-      const edgeCount = edges.length;
-      const skipEdges = (isMobile && k < 1) || (edgeCount > 10000 && k < 0.5);
+      // Apply world transform
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * t.x, dpr * t.y);
 
-      if (!skipEdges) {
-        const edgeAlpha = edgeCount < 1000
-          ? Math.min(0.4, EDGE_ALPHA * (1000 / Math.max(1, edgeCount)))
-          : EDGE_ALPHA;
-        ctx.globalAlpha = edgeAlpha;
-        ctx.strokeStyle = EDGE_COLOR;
-        ctx.lineWidth = EDGE_WIDTH / k;
-        ctx.beginPath();
-
-        // Sample edges when zoomed out with many edges
-        const step = (edgeCount > 20000 && k < 1.5) ? 2 : 1;
-
-        for (let i = 0, len = edgeCount * 4; i < len; i += 4 * step) {
-          const sx = edgeCoords[i];
-          const sy = edgeCoords[i + 1];
-          const tx = edgeCoords[i + 2];
-          const ty = edgeCoords[i + 3];
-
-          // Frustum cull
-          if (
-            (sx < vx0 && tx < vx0) ||
-            (sx > vx1 && tx > vx1) ||
-            (sy < vy0 && ty < vy0) ||
-            (sy > vy1 && ty > vy1)
-          ) continue;
-
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(tx, ty);
-        }
-        ctx.stroke();
+      // --- A1: Draw edges from pre-rendered offscreen canvas ---
+      const edgeLayer = edgeLayerRef.current;
+      if (edgeLayer && k >= 0.4) {
+        ctx.globalAlpha = 1;
+        ctx.drawImage(edgeLayer, 0, 0);
       }
 
-      // --- Draw highlighted path edges ---
-      if (hasPath && currentPath) {
+      // --- Draw path edges (pre-baked coords) ---
+      if (hasPath && pCoords.length >= 4) {
         ctx.globalAlpha = PATH_ALPHA;
         ctx.strokeStyle = PATH_COLOR;
         ctx.lineWidth = PATH_WIDTH / k;
         ctx.beginPath();
-        for (let i = 0; i < currentPath.length - 1; i++) {
-          const sn = data.nodeMap.get(currentPath[i]);
-          const tn = data.nodeMap.get(currentPath[i + 1]);
-          if (!sn || !tn) continue;
-          ctx.moveTo(sn.x * WORLD_WIDTH, sn.y * WORLD_HEIGHT);
-          ctx.lineTo(tn.x * WORLD_WIDTH, tn.y * WORLD_HEIGHT);
+        ctx.moveTo(pCoords[0], pCoords[1]);
+        for (let i = 2; i < pCoords.length; i += 2) {
+          ctx.lineTo(pCoords[i], pCoords[i + 1]);
         }
         ctx.stroke();
       }
 
-      // --- Draw hovered node connections ---
-      if (hovered && !hasPath) {
-        const connections = edgesByNodeRef.current.get(hovered.id);
-        if (connections) {
-          ctx.globalAlpha = 0.3;
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 0.8 / k;
-          ctx.beginPath();
-          const hx = hovered.x * WORLD_WIDTH;
-          const hy = hovered.y * WORLD_HEIGHT;
-          for (const nid of connections) {
-            if (!visibleSet.has(nid)) continue;
-            const n = data.nodeMap.get(nid);
-            if (!n) continue;
-            ctx.moveTo(hx, hy);
-            ctx.lineTo(n.x * WORLD_WIDTH, n.y * WORLD_HEIGHT);
-          }
-          ctx.stroke();
-        }
-      }
-
-      // --- Draw nodes (from pre-baked arrays) ---
+      // --- Draw nodes ---
       if (nr) {
-        const selAId = selA?.id;
-        const selBId = selB?.id;
-        const hovId = hovered?.id;
-
         for (let i = 0; i < nr.xs.length; i++) {
           const id = nr.ids[i];
           if (!visibleSet.has(id)) continue;
@@ -392,7 +320,6 @@ export default function Graph({ data }: GraphProps) {
           const r = nr.radii[i];
           const isOnPath = pathNodes.has(id);
           const isSelected = id === selAId || id === selBId;
-          const isHovered = id === hovId;
 
           ctx.globalAlpha = (hasPath && !isOnPath) ? 0.15 : 1;
           ctx.fillStyle = nr.colors[i];
@@ -400,9 +327,10 @@ export default function Graph({ data }: GraphProps) {
           ctx.arc(nx, ny, r, 0, Math.PI * 2);
           ctx.fill();
 
-          if (isOnPath || isSelected || isHovered) {
+          // Highlight ring for selected/path nodes only (no hover)
+          if (isOnPath || isSelected) {
             ctx.globalAlpha = 1;
-            ctx.strokeStyle = isOnPath ? PATH_COLOR : isSelected ? "#ffffff" : "#ffffffcc";
+            ctx.strokeStyle = isOnPath ? PATH_COLOR : "#ffffff";
             ctx.lineWidth = (isOnPath ? 2 : 1.5) / k;
             ctx.beginPath();
             ctx.arc(nx, ny, r + 2 / k, 0, Math.PI * 2);
@@ -411,35 +339,42 @@ export default function Graph({ data }: GraphProps) {
         }
       }
 
-      // --- Draw labels at high zoom (capped to avoid perf death) ---
-      if (k > LABEL_ZOOM_THRESHOLD && nr) {
-        ctx.globalAlpha = 0.85;
-        const fontSize = Math.max(8, 12 / k);
-        ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
+      // --- B2: Landmark labels (always visible, top 20) ---
+      if (nr) {
+        ctx.globalAlpha = 0.8;
+        const landmarkFontSize = Math.max(6, Math.min(14, 10 / k));
+        ctx.font = `600 ${landmarkFontSize}px Inter, system-ui, sans-serif`;
         ctx.fillStyle = "#ffffff";
         ctx.textBaseline = "middle";
 
-        // Only label the top N nodes by count that are in viewport — max 40 labels
-        const MAX_LABELS = 40;
-        const candidates: { idx: number; count: number }[] = [];
-
-        for (let i = 0; i < nr.xs.length; i++) {
+        for (const i of landmarkIndicesRef.current) {
           if (!visibleSet.has(nr.ids[i])) continue;
           const nx = nr.xs[i];
           const ny = nr.ys[i];
           if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
-          candidates.push({ idx: i, count: nr.counts[i] });
+          ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
         }
 
-        candidates.sort((a, b) => b.count - a.count);
-        const labelCount = Math.min(candidates.length, MAX_LABELS);
-        for (let j = 0; j < labelCount; j++) {
-          const i = candidates[j].idx;
-          ctx.fillText(nr.names[i], nr.xs[i] + nr.radii[i] + 3 / k, nr.ys[i]);
+        // Additional labels at high zoom (from pre-sorted list, early exit)
+        if (k > 2.5) {
+          ctx.globalAlpha = 0.7;
+          const fontSize = Math.max(6, 10 / k);
+          ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
+          let labelCount = 0;
+          for (const i of sortedByCountRef.current) {
+            if (labelCount >= MAX_LABELS_ZOOMED) break;
+            if (!visibleSet.has(nr.ids[i])) continue;
+            const nx = nr.xs[i];
+            const ny = nr.ys[i];
+            if (nx < vx0 || nx > vx1 || ny < vy0 || ny > vy1) continue;
+            // Skip landmarks (already drawn)
+            if (labelCount < LANDMARK_COUNT && landmarkIndicesRef.current.includes(i)) continue;
+            ctx.fillText(nr.names[i], nx + nr.radii[i] + 3 / k, ny);
+            labelCount++;
+          }
         }
       }
 
-      ctx.restore();
       rafRef.current = requestAnimationFrame(render);
     }
 
@@ -452,38 +387,7 @@ export default function Graph({ data }: GraphProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // Mouse/touch interaction — throttled to avoid excessive re-renders
-  const lastPointerTime = useRef(0);
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (isMobileRef.current) return;
-
-      const now = performance.now();
-      if (now - lastPointerTime.current < 32) return; // ~30fps throttle
-      lastPointerTime.current = now;
-
-      const t = transformRef.current;
-      const wx = (e.clientX - t.x) / t.k;
-      const wy = (e.clientY - t.y) / t.k;
-
-      const qt = qtRef.current;
-      if (!qt) return;
-
-      const hitRadius = 15 / t.k;
-      const found = qt.find(wx, wy, hitRadius) || null;
-
-      if (found !== hoveredRef.current) {
-        setHoveredNode(found);
-      }
-      setMousePos({ x: e.clientX, y: e.clientY });
-    },
-    []
-  );
-
-  const handlePointerLeave = useCallback(() => {
-    setHoveredNode(null);
-  }, []);
-
+  // Click handler (no hover — click only)
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const t = transformRef.current;
@@ -497,7 +401,6 @@ export default function Graph({ data }: GraphProps) {
       const found = qt.find(wx, wy, hitRadius);
 
       if (!found) {
-        // Click empty space — clear selections
         setSelectedA(null);
         setSelectedB(null);
         setPath(null);
@@ -512,7 +415,6 @@ export default function Graph({ data }: GraphProps) {
         setSelectedB(found);
         setDrawerNode(null);
       } else {
-        // Third click or same node — start fresh
         setSelectedA(found);
         setSelectedB(null);
         setPath(null);
@@ -522,7 +424,6 @@ export default function Graph({ data }: GraphProps) {
     [selectedA, selectedB]
   );
 
-  // Select node from search or path display
   const handleSelectNode = useCallback(
     (node: GraphNode) => {
       if (!selectedA) {
@@ -547,12 +448,7 @@ export default function Graph({ data }: GraphProps) {
       const ny = node.y * WORLD_HEIGHT;
       const tx = window.innerWidth / 2 - nx * targetK;
       const ty = window.innerHeight / 2 - ny * targetK;
-      const targetTransform = zoomIdentity.translate(tx, ty).scale(targetK);
-
-      select(canvas)
-        .transition()
-        .duration(750)
-        .call(zoomBehavior.transform, targetTransform);
+      select(canvas).transition().duration(750).call(zoomBehavior.transform, zoomIdentity.translate(tx, ty).scale(targetK));
     },
     [selectedA, selectedB]
   );
@@ -564,7 +460,6 @@ export default function Graph({ data }: GraphProps) {
     setDrawerNode(null);
   }, []);
 
-  // MiniMap jump handler
   const handleMiniMapJump = useCallback((worldX: number, worldY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -572,8 +467,7 @@ export default function Graph({ data }: GraphProps) {
     const currentK = transformRef.current.k;
     const tx = window.innerWidth / 2 - worldX * currentK;
     const ty = window.innerHeight / 2 - worldY * currentK;
-    const targetTransform = zoomIdentity.translate(tx, ty).scale(currentK);
-    select(canvas).transition().duration(500).call(zoomBehavior.transform, targetTransform);
+    select(canvas).transition().duration(500).call(zoomBehavior.transform, zoomIdentity.translate(tx, ty).scale(currentK));
   }, []);
 
   return (
@@ -581,16 +475,10 @@ export default function Graph({ data }: GraphProps) {
       <canvas
         ref={canvasRef}
         className="fixed inset-0 cursor-grab active:cursor-grabbing"
-        onPointerMove={handlePointerMove}
-        onPointerLeave={handlePointerLeave}
         onClick={handleClick}
       />
 
       <SearchBar nodes={data.nodes} onSelect={handleSelectNode} />
-
-      {hoveredNode && !drawerNode && (
-        <PlayerTooltip node={hoveredNode} x={mousePos.x} y={mousePos.y} />
-      )}
 
       {path && path.length > 0 && (
         <PathDisplay

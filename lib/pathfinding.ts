@@ -23,13 +23,15 @@ export function bfs(
       parent.set(neighbor, current);
 
       if (neighbor === end) {
-        // Reconstruct path
-        const path: string[] = [end];
+        // Reconstruct path (push + reverse instead of unshift)
+        const path: string[] = [];
         let node = end;
         while (node !== start) {
+          path.push(node);
           node = parent.get(node)!;
-          path.unshift(node);
         }
+        path.push(start);
+        path.reverse();
         return path;
       }
 

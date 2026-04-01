@@ -287,8 +287,40 @@ function MiniMapCanvas({
   onJump: (worldX: number, worldY: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const staticLayerRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number>(0);
 
+  // Render nodes once to a static offscreen canvas
+  useEffect(() => {
+    const offscreen = document.createElement("canvas");
+    const dpr = window.devicePixelRatio || 1;
+    offscreen.width = MAP_W * dpr;
+    offscreen.height = MAP_H * dpr;
+    const ctx = offscreen.getContext("2d")!;
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(0, 0, MAP_W, MAP_H);
+
+    const sx = MAP_W / WORLD_WIDTH;
+    const sy = MAP_H / WORLD_HEIGHT;
+
+    // Pre-compute colors once, not per frame
+    for (const node of data.nodes) {
+      const x = node.x * WORLD_WIDTH * sx;
+      const y = node.y * WORLD_HEIGHT * sy;
+      const r = Math.max(0.8, Math.sqrt(node.count) * 0.15);
+      ctx.fillStyle = nodeColor(node.type, node.midYear);
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    staticLayerRef.current = offscreen;
+  }, [data]);
+
+  // Only update viewport rectangle (lightweight, ~10fps)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -297,28 +329,28 @@ function MiniMapCanvas({
     canvas.width = MAP_W * dpr;
     canvas.height = MAP_H * dpr;
 
+    let lastUpdate = 0;
     function render() {
-      ctx.save();
+      const now = performance.now();
+      if (now - lastUpdate < 100) { // ~10fps for viewport rect
+        rafRef.current = requestAnimationFrame(render);
+        return;
+      }
+      lastUpdate = now;
+
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillRect(0, 0, MAP_W, MAP_H);
 
-      const sx = MAP_W / WORLD_WIDTH;
-      const sy = MAP_H / WORLD_HEIGHT;
-
-      for (const node of data.nodes) {
-        const x = node.x * WORLD_WIDTH * sx;
-        const y = node.y * WORLD_HEIGHT * sy;
-        const r = Math.max(0.8, Math.sqrt(node.count) * 0.15);
-        ctx.fillStyle = nodeColor(node.type, node.midYear);
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
+      // Draw static node layer
+      const staticLayer = staticLayerRef.current;
+      if (staticLayer) {
+        ctx.drawImage(staticLayer, 0, 0, MAP_W, MAP_H);
       }
 
+      // Draw viewport rectangle only
       const t = transformRef.current;
       if (t) {
+        const sx = MAP_W / WORLD_WIDTH;
+        const sy = MAP_H / WORLD_HEIGHT;
         const vx = (-t.x / t.k) * sx;
         const vy = (-t.y / t.k) * sy;
         const vw = (window.innerWidth / t.k) * sx;
@@ -331,7 +363,6 @@ function MiniMapCanvas({
         ctx.fillRect(vx, vy, vw, vh);
       }
 
-      ctx.restore();
       rafRef.current = requestAnimationFrame(render);
     }
 
