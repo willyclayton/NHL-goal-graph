@@ -27,6 +27,7 @@ import SearchBar from "./SearchBar";
 import Timeline from "./Timeline";
 import Legend from "./Legend";
 import InfoDrawer from "./InfoDrawer";
+import RandomPathButton from "./RandomPathButton";
 
 interface GraphProps {
   data: GraphData;
@@ -460,6 +461,33 @@ export default function Graph({ data }: GraphProps) {
     setDrawerNode(null);
   }, []);
 
+  const handleRandomPath = useCallback(
+    (nodeA: GraphNode, nodeB: GraphNode, foundPath: string[]) => {
+      setSelectedA(nodeA);
+      setSelectedB(nodeB);
+      setPath(foundPath);
+      setDrawerNode(null);
+
+      // Zoom to show both nodes
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>().scaleExtent([ZOOM_MIN, ZOOM_MAX]);
+      const ax = nodeA.x * WORLD_WIDTH;
+      const ay = nodeA.y * WORLD_HEIGHT;
+      const bx = nodeB.x * WORLD_WIDTH;
+      const by = nodeB.y * WORLD_HEIGHT;
+      const cx = (ax + bx) / 2;
+      const cy = (ay + by) / 2;
+      const dx = Math.abs(ax - bx) + 200;
+      const dy = Math.abs(ay - by) + 200;
+      const targetK = Math.min(window.innerWidth / dx, window.innerHeight / dy, 3) * 0.8;
+      const tx = window.innerWidth / 2 - cx * targetK;
+      const ty = window.innerHeight / 2 - cy * targetK;
+      select(canvas).transition().duration(1000).call(zoomBehavior.transform, zoomIdentity.translate(tx, ty).scale(targetK));
+    },
+    []
+  );
+
   const handleMiniMapJump = useCallback((worldX: number, worldY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -479,6 +507,7 @@ export default function Graph({ data }: GraphProps) {
       />
 
       <SearchBar nodes={data.nodes} onSelect={handleSelectNode} />
+      <RandomPathButton data={data} onPathFound={handleRandomPath} />
 
       {path && path.length > 0 && (
         <PathDisplay

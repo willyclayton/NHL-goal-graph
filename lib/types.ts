@@ -2,6 +2,7 @@ export interface GraphNode {
   id: string; // "s_8471214" or "g_8470594"
   name: string;
   type: "scorer" | "goalie";
+  position: string; // "C", "L", "R", "D", "G"
   count: number; // total goals scored / allowed
   firstYear: number;
   lastYear: number;

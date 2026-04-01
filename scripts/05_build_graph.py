@@ -22,11 +22,13 @@ EDGES_OUT = os.path.join(os.path.dirname(__file__), "..", "public", "data", "edg
 def main():
     os.makedirs(os.path.dirname(NODES_OUT), exist_ok=True)
 
-    # Load player names
+    # Load player names and positions
     player_names = {}
+    player_positions = {}
     with open(PLAYERS_CSV, "r") as f:
         for row in csv.DictReader(f):
             player_names[row["player_id"]] = row["name"]
+            player_positions[row["player_id"]] = row.get("position", "")
 
     # Process goals
     scorer_goals = defaultdict(int)    # scorer_id -> count
@@ -59,6 +61,7 @@ def main():
             "id": f"s_{sid}",
             "name": player_names.get(sid, f"Unknown ({sid})"),
             "type": "scorer",
+            "position": player_positions.get(sid, ""),
             "count": count,
             "firstYear": first,
             "lastYear": last,
@@ -73,6 +76,7 @@ def main():
             "id": f"g_{gid}",
             "name": player_names.get(gid, f"Unknown ({gid})"),
             "type": "goalie",
+            "position": "G",
             "count": count,
             "firstYear": first,
             "lastYear": last,
