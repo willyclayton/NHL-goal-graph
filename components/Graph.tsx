@@ -214,18 +214,21 @@ export default function Graph({ data }: GraphProps) {
         .y((d) => d.y * WORLD_HEIGHT)
         .addAll(visible);
 
-      // Render edges to offscreen canvas (two-pass woven glow style)
+      // Render edges to offscreen canvas (batched woven glow style)
       const offscreen = edgeLayerRef.current;
       if (offscreen) {
-        const ctx = offscreen.getContext("2d")!;
-        ctx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        const ectx = offscreen.getContext("2d")!;
+        ectx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-        const centerX = WORLD_WIDTH / 2;
-        const centerY = WORLD_HEIGHT / 2;
+        const wcx = WORLD_WIDTH / 2;
+        const wcy = WORLD_HEIGHT / 2;
         const maxDist = Math.min(WORLD_WIDTH, WORLD_HEIGHT) * RADIAL_OUTER_RATIO;
 
-        // Pre-compute edge data
-        const visibleEdges: { sx: number; sy: number; tx: number; ty: number; dist: number }[] = [];
+        // Bucket edges by distance for batched drawing (4 bands)
+        const NBUCKETS = 4;
+        const buckets: { sx: number; sy: number; tx: number; ty: number; cpx: number; cpy: number }[][] =
+          Array.from({ length: NBUCKETS }, () => []);
+
         for (const edge of data.edges) {
           if (!visibleSet.has(edge.source) || !visibleSet.has(edge.target)) continue;
           const sn = data.nodeMap.get(edge.source);
@@ -234,47 +237,58 @@ export default function Graph({ data }: GraphProps) {
           const sx = sn.x * WORLD_WIDTH, sy = sn.y * WORLD_HEIGHT;
           const tx = tn.x * WORLD_WIDTH, ty = tn.y * WORLD_HEIGHT;
           const dx = sx - tx, dy = sy - ty;
-          visibleEdges.push({ sx, sy, tx, ty, dist: Math.sqrt(dx * dx + dy * dy) });
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const closeness = 1 - Math.min(dist / maxDist, 1);
+          const bi = Math.min(NBUCKETS - 1, Math.floor(closeness * NBUCKETS));
+          const midX = (sx + tx) / 2, midY = (sy + ty) / 2;
+          buckets[bi].push({
+            sx, sy, tx, ty,
+            cpx: midX + (wcx - midX) * RADIAL_CURVE_PULL,
+            cpy: midY + (wcy - midY) * RADIAL_CURVE_PULL,
+          });
         }
 
-        // Pass 1: Soft wide glow (accumulates in dense areas)
-        ctx.lineWidth = EDGE_GLOW_WIDTH;
-        for (const e of visibleEdges) {
-          const closeness = 1 - Math.min(e.dist / maxDist, 1);
-          const alpha = EDGE_GLOW_ALPHA_MIN + closeness * (EDGE_GLOW_ALPHA_MAX - EDGE_GLOW_ALPHA_MIN);
-          const midX = (e.sx + e.tx) / 2, midY = (e.sy + e.ty) / 2;
-          const cpx = midX + (centerX - midX) * RADIAL_CURVE_PULL;
-          const cpy = midY + (centerY - midY) * RADIAL_CURVE_PULL;
+        // Draw each bucket as batched paths (glow + sharp, scorer color + goalie color)
+        for (let bi = 0; bi < NBUCKETS; bi++) {
+          const bucket = buckets[bi];
+          if (bucket.length === 0) continue;
+          const t = (bi + 0.5) / NBUCKETS; // 0..1 closeness
 
-          const grad = ctx.createLinearGradient(e.sx, e.sy, e.tx, e.ty);
-          grad.addColorStop(0, `rgba(${EDGE_COLOR_SCORER},${alpha})`);
-          grad.addColorStop(1, `rgba(${EDGE_COLOR_GOALIE},${alpha})`);
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = grad;
-          ctx.beginPath();
-          ctx.moveTo(e.sx, e.sy);
-          ctx.quadraticCurveTo(cpx, cpy, e.tx, e.ty);
-          ctx.stroke();
-        }
+          // --- Glow pass (wide, low alpha, accumulates in dense areas) ---
+          const glowA = 0.008 + t * 0.018;
+          ectx.lineWidth = EDGE_GLOW_WIDTH;
 
-        // Pass 2: Sharp gradient core
-        ctx.lineWidth = EDGE_SHARP_WIDTH;
-        for (const e of visibleEdges) {
-          const closeness = 1 - Math.min(e.dist / maxDist, 1);
-          const alpha = EDGE_ALPHA_MIN + closeness * (EDGE_ALPHA_MAX - EDGE_ALPHA_MIN);
-          const midX = (e.sx + e.tx) / 2, midY = (e.sy + e.ty) / 2;
-          const cpx = midX + (centerX - midX) * RADIAL_CURVE_PULL;
-          const cpy = midY + (centerY - midY) * RADIAL_CURVE_PULL;
+          // Scorer blue glow
+          ectx.globalAlpha = glowA;
+          ectx.strokeStyle = `rgb(${EDGE_COLOR_SCORER})`;
+          ectx.beginPath();
+          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
+          ectx.stroke();
 
-          const grad = ctx.createLinearGradient(e.sx, e.sy, e.tx, e.ty);
-          grad.addColorStop(0, `rgba(${EDGE_COLOR_SCORER},${alpha})`);
-          grad.addColorStop(1, `rgba(${EDGE_COLOR_GOALIE},${alpha})`);
-          ctx.globalAlpha = 1;
-          ctx.strokeStyle = grad;
-          ctx.beginPath();
-          ctx.moveTo(e.sx, e.sy);
-          ctx.quadraticCurveTo(cpx, cpy, e.tx, e.ty);
-          ctx.stroke();
+          // Goalie amber glow
+          ectx.globalAlpha = glowA;
+          ectx.strokeStyle = `rgb(${EDGE_COLOR_GOALIE})`;
+          ectx.beginPath();
+          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
+          ectx.stroke();
+
+          // --- Sharp pass (thin core) ---
+          const sharpA = 0.03 + t * 0.1;
+          ectx.lineWidth = EDGE_SHARP_WIDTH;
+
+          // Scorer blue core
+          ectx.globalAlpha = sharpA;
+          ectx.strokeStyle = `rgb(${EDGE_COLOR_SCORER})`;
+          ectx.beginPath();
+          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
+          ectx.stroke();
+
+          // Goalie amber core
+          ectx.globalAlpha = sharpA;
+          ectx.strokeStyle = `rgb(${EDGE_COLOR_GOALIE})`;
+          ectx.beginPath();
+          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
+          ectx.stroke();
         }
       }
 
@@ -406,36 +420,8 @@ export default function Graph({ data }: GraphProps) {
         ctx.stroke();
       }
 
-      // --- Draw nodes with glow ---
+      // --- Draw nodes ---
       if (nr) {
-        // Glow pass first (only at reasonable zoom levels to avoid perf hit)
-        if (k >= 0.5) {
-          for (let i = 0; i < nr.xs.length; i++) {
-            const id = nr.ids[i];
-            if (!visibleSet.has(id)) continue;
-            const nx = nr.xs[i];
-            const ny = nr.ys[i];
-            const glowR = nr.radii[i] * 4;
-            if (nx < vx0 - glowR || nx > vx1 + glowR || ny < vy0 - glowR || ny > vy1 + glowR) continue;
-
-            const brightness = 0.5 + 0.5 * (nr.counts[i] / 200);
-            const dimmed = hasPath && !pathNodes.has(id);
-            const isScorer = nr.ids[i].startsWith("s_");
-            const c = isScorer ? "90,180,205" : "230,155,90";
-            const glowAlpha = (dimmed ? 0.05 : brightness * 0.25);
-
-            const grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, glowR);
-            grad.addColorStop(0, `rgba(${c},${glowAlpha})`);
-            grad.addColorStop(1, `rgba(${c},0)`);
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(nx, ny, glowR, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-
-        // Core dots
         for (let i = 0; i < nr.xs.length; i++) {
           const id = nr.ids[i];
           if (!visibleSet.has(id)) continue;
@@ -449,7 +435,7 @@ export default function Graph({ data }: GraphProps) {
           const r = nr.radii[i];
           const isOnPath = pathNodes.has(id);
           const isSelected = id === selAId || id === selBId;
-          const brightness = 0.5 + 0.5 * (nr.counts[i] / 200);
+          const brightness = 0.5 + 0.5 * Math.min(nr.counts[i] / 200, 1);
 
           ctx.globalAlpha = (hasPath && !isOnPath) ? 0.15 : brightness;
           ctx.fillStyle = nr.colors[i];
