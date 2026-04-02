@@ -222,7 +222,7 @@ export default function Graph({ data }: GraphProps) {
 
         ectx.globalAlpha = EDGE_ALPHA;
         ectx.strokeStyle = EDGE_COLOR;
-        ectx.lineWidth = EDGE_WIDTH * EDGE_CANVAS_SCALE;
+        ectx.lineWidth = EDGE_WIDTH;
         ectx.beginPath();
         for (const edge of data.edges) {
           if (!visibleSet.has(edge.source) || !visibleSet.has(edge.target)) continue;
@@ -306,10 +306,11 @@ export default function Graph({ data }: GraphProps) {
 
     select(canvas).call(zoomBehavior);
 
-    // Center graph
-    const initialK = Math.min(width / WORLD_WIDTH, height / WORLD_HEIGHT) * 0.9;
-    const initialX = (width - WORLD_WIDTH * initialK) / 2;
-    const initialY = (height - WORLD_HEIGHT * initialK) / 2;
+    // Center graph — zoom to fit the radial rings, not the full world
+    const ringDiameter = Math.min(WORLD_WIDTH, WORLD_HEIGHT) * RADIAL_OUTER_RATIO * 2 * 1.15;
+    const initialK = Math.min(width, height) / ringDiameter;
+    const initialX = width / 2 - (WORLD_WIDTH / 2) * initialK;
+    const initialY = height / 2 - (WORLD_HEIGHT / 2) * initialK;
     select(canvas).call(zoomBehavior.transform, zoomIdentity.translate(initialX, initialY).scale(initialK));
 
     function render() {
