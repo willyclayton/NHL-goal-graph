@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Mockup 1: Spider Web</title>
+<style>*{margin:0;padding:0}body{background:#0b1620;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:400px;line-height:1.5}
+</style></head><body>
+<div id="label">1 / Spider Web</div>
+<div id="desc">All edges rendered as faint white threads creating a spider-web texture. Nodes glow softly with radial gradients. The web is always visible, giving the graph a cosmic, interconnected feel.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';
+X.scale(2,2);
+
+// Generate fake bipartite graph
+const nodes=[];const edges=[];
+const NS=200,NG=80;
+for(let i=0;i<NS;i++){
+  const angle=Math.random()*Math.PI*2;
+  const r=120+Math.random()*Math.min(W,H)*0.35;
+  nodes.push({x:W/2+Math.cos(angle)*r*(0.6+Math.random()*0.4),y:H/2+Math.sin(angle)*r*(0.6+Math.random()*0.4),type:'scorer',r:1.5+Math.random()*3,count:Math.random()});
+}
+for(let i=0;i<NG;i++){
+  const angle=Math.random()*Math.PI*2;
+  const r=60+Math.random()*Math.min(W,H)*0.2;
+  nodes.push({x:W/2+Math.cos(angle)*r*(0.6+Math.random()*0.4),y:H/2+Math.sin(angle)*r*(0.6+Math.random()*0.4),type:'goalie',r:1.5+Math.random()*3,count:Math.random()});
+}
+// Create edges (scorer->goalie)
+for(let i=0;i<NS;i++){
+  const numEdges=1+Math.floor(Math.random()*4);
+  for(let j=0;j<numEdges;j++){
+    const gi=NS+Math.floor(Math.random()*NG);
+    edges.push([i,gi]);
+  }
+}
+
+function draw(){
+  X.fillStyle='#0b1620';X.fillRect(0,0,W,H);
+
+  // Draw ALL edges as white spider web threads
+  X.globalAlpha=0.04;
+  X.strokeStyle='#ffffff';
+  X.lineWidth=0.5;
+  X.beginPath();
+  for(const[a,b]of edges){
+    X.moveTo(nodes[a].x,nodes[a].y);
+    X.lineTo(nodes[b].x,nodes[b].y);
+  }
+  X.stroke();
+
+  // Draw nodes with glow
+  for(const n of nodes){
+    // Outer glow
+    const grad=X.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*6);
+    const baseColor=n.type==='scorer'?'106,170,184':'217,149,106';
+    grad.addColorStop(0,`rgba(${baseColor},0.15)`);
+    grad.addColorStop(1,`rgba(${baseColor},0)`);
+    X.globalAlpha=1;
+    X.fillStyle=grad;
+    X.fillRect(n.x-n.r*6,n.y-n.r*6,n.r*12,n.r*12);
+
+    // Core dot
+    X.globalAlpha=0.9;
+    X.fillStyle=n.type==='scorer'?'#6aaab8':'#d9956a';
+    X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();
+  }
+}
+draw();
+</script></body></html>

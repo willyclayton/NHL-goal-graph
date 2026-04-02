@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Mockup 4: Gradient Flow</title>
+<style>*{margin:0;padding:0}body{background:#080e16;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:400px;line-height:1.5}
+</style></head><body>
+<div id="label">4 / Gradient Flow</div>
+<div id="desc">Bipartite left-right layout. Edges rendered as gradient strokes that flow from scorer blue to goalie amber. Nodes have soft drop shadows. A subtle vertical divider marks the boundary. Dense but beautiful.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';
+X.scale(2,2);
+
+const nodes=[];const edges=[];
+const NG=70,NS=180;
+const margin=80;
+
+// Goalies on left
+for(let i=0;i<NG;i++){
+  nodes.push({
+    x:margin+Math.random()*(W*0.35-margin),
+    y:margin+Math.random()*(H-margin*2),
+    type:'goalie',
+    r:1.5+Math.random()*3.5,
+    count:Math.random()
+  });
+}
+// Scorers on right
+for(let i=0;i<NS;i++){
+  nodes.push({
+    x:W*0.65+Math.random()*(W*0.35-margin),
+    y:margin+Math.random()*(H-margin*2),
+    type:'scorer',
+    r:1+Math.random()*3,
+    count:Math.random()
+  });
+}
+// Edges
+for(let i=NG;i<NG+NS;i++){
+  const numE=1+Math.floor(Math.random()*3);
+  for(let j=0;j<numE;j++){
+    edges.push([i,Math.floor(Math.random()*NG)]);
+  }
+}
+
+function draw(){
+  // Background with subtle gradient
+  const bg=X.createLinearGradient(0,0,W,0);
+  bg.addColorStop(0,'#0d1018');bg.addColorStop(0.5,'#0b1620');bg.addColorStop(1,'#0d1018');
+  X.fillStyle=bg;X.fillRect(0,0,W,H);
+
+  // Center divider
+  X.globalAlpha=0.04;X.strokeStyle='#ffffff';X.lineWidth=1;
+  X.setLineDash([4,8]);
+  X.beginPath();X.moveTo(W/2,40);X.lineTo(W/2,H-40);X.stroke();
+  X.setLineDash([]);
+
+  // Side labels
+  X.globalAlpha=0.06;X.fillStyle='#d9956a';
+  X.font='bold 40px Inter,system-ui';X.textAlign='center';
+  X.fillText('GOALIES',W*0.25,H/2);
+  X.fillStyle='#6aaab8';
+  X.fillText('SCORERS',W*0.75,H/2);
+
+  // Gradient edges
+  for(const[a,b]of edges){
+    const na=nodes[a],nb=nodes[b];
+    const grad=X.createLinearGradient(na.x,na.y,nb.x,nb.y);
+    grad.addColorStop(0,'rgba(106,170,184,0.06)');
+    grad.addColorStop(1,'rgba(217,149,106,0.06)');
+    X.globalAlpha=1;
+    X.strokeStyle=grad;
+    X.lineWidth=0.5;
+    X.beginPath();
+    // Slight curve
+    const cpy=na.y+(nb.y-na.y)*0.5+(Math.random()-0.5)*40;
+    X.moveTo(na.x,na.y);
+    X.quadraticCurveTo(W/2,cpy,nb.x,nb.y);
+    X.stroke();
+  }
+
+  // Nodes with shadow
+  for(const n of nodes){
+    // Shadow
+    X.globalAlpha=0.15;
+    X.fillStyle='#000000';
+    X.beginPath();X.arc(n.x+1,n.y+2,n.r*1.5,0,Math.PI*2);X.fill();
+
+    // Glow
+    const g=X.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*5);
+    const c=n.type==='scorer'?'106,170,184':'217,149,106';
+    g.addColorStop(0,`rgba(${c},0.12)`);g.addColorStop(1,`rgba(${c},0)`);
+    X.globalAlpha=1;X.fillStyle=g;
+    X.beginPath();X.arc(n.x,n.y,n.r*5,0,Math.PI*2);X.fill();
+
+    // Core
+    X.globalAlpha=0.95;
+    X.fillStyle=n.type==='scorer'?'#6aaab8':'#d9956a';
+    X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();
+
+    // Bright center
+    X.globalAlpha=0.4;X.fillStyle='#ffffff';
+    X.beginPath();X.arc(n.x-n.r*0.25,n.y-n.r*0.25,n.r*0.35,0,Math.PI*2);X.fill();
+  }
+}
+draw();
+</script></body></html>

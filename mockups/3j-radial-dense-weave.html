@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>3J: Dense Weave</title>
+<style>*{margin:0;padding:0}body{background:#090e16;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:420px;line-height:1.5}
+</style></head><body>
+<div id="label">3J / Dense Weave</div>
+<div id="desc">Maximum density — more edges, tighter rings, gradient strokes with distance opacity AND angular variation. Short edges are bright and saturated, long arcs are dim and desaturated. Creates a dense tapestry of color between the rings.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';
+X.scale(2,2);
+
+const cx=W/2,cy=H/2;
+const innerR=Math.min(W,H)*0.17;
+const outerR=Math.min(W,H)*0.40;
+const nodes=[];const edges=[];
+const NG=80,NS=250;
+
+for(let i=0;i<NG;i++){
+  const angle=(i/NG)*Math.PI*2-Math.PI/2;
+  const jitter=(Math.random()-0.5)*18;
+  nodes.push({x:cx+Math.cos(angle)*(innerR+jitter),y:cy+Math.sin(angle)*(innerR+jitter),type:'goalie',r:1.5+Math.random()*3,count:10+Math.floor(Math.random()*200)});
+}
+for(let i=0;i<NS;i++){
+  const angle=(i/NS)*Math.PI*2-Math.PI/2;
+  const jitter=(Math.random()-0.5)*35;
+  nodes.push({x:cx+Math.cos(angle)*(outerR+jitter),y:cy+Math.sin(angle)*(outerR+jitter),type:'scorer',r:0.8+Math.random()*2.5,count:5+Math.floor(Math.random()*150)});
+}
+// More edges for density
+for(let i=NG;i<NG+NS;i++){
+  const numE=2+Math.floor(Math.random()*4);
+  for(let j=0;j<numE;j++) edges.push([i,Math.floor(Math.random()*NG)]);
+}
+const maxDist=outerR*2;
+const edgeData=edges.map(([a,b])=>{
+  const dx=nodes[a].x-nodes[b].x,dy=nodes[a].y-nodes[b].y;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  const midX=(nodes[a].x+nodes[b].x)/2-cx;
+  const midY=(nodes[a].y+nodes[b].y)/2-cy;
+  const angle=Math.atan2(midY,midX);
+  return{a,b,dist,angle};
+});
+
+function draw(){
+  X.fillStyle='#090e16';X.fillRect(0,0,W,H);
+
+  // Very faint ring texture
+  for(let r=innerR-10;r<=outerR+10;r+=8){
+    X.globalAlpha=0.008;X.strokeStyle='#6090a0';X.lineWidth=0.3;
+    X.beginPath();X.arc(cx,cy,r,0,Math.PI*2);X.stroke();
+  }
+
+  // Ambient radial wash
+  const wash=X.createRadialGradient(cx,cy,innerR*0.8,cx,cy,outerR*1.1);
+  wash.addColorStop(0,'rgba(200,170,130,0.015)');wash.addColorStop(0.5,'rgba(130,170,190,0.01)');wash.addColorStop(1,'rgba(0,0,0,0)');
+  X.globalAlpha=1;X.fillStyle=wash;X.fillRect(0,0,W,H);
+
+  // Wide glow pass
+  for(const ed of edgeData){
+    const na=nodes[ed.a],nb=nodes[ed.b];
+    const closeness=1-Math.min(ed.dist/maxDist,1);
+    const alpha=(0.01+closeness*0.025);
+    const midX=(na.x+nb.x)/2,midY=(na.y+nb.y)/2;
+    const cpx=midX+(cx-midX)*0.3,cpy=midY+(cy-midY)*0.3;
+
+    const grad=X.createLinearGradient(na.x,na.y,nb.x,nb.y);
+    grad.addColorStop(0,`rgba(90,170,200,${alpha})`);
+    grad.addColorStop(1,`rgba(220,155,95,${alpha})`);
+    X.globalAlpha=1;X.strokeStyle=grad;X.lineWidth=4;
+    X.beginPath();X.moveTo(na.x,na.y);X.quadraticCurveTo(cpx,cpy,nb.x,nb.y);X.stroke();
+  }
+
+  // Sharp core pass
+  for(const ed of edgeData){
+    const na=nodes[ed.a],nb=nodes[ed.b];
+    const closeness=1-Math.min(ed.dist/maxDist,1);
+    // Saturation boost for short edges
+    const sat=0.5+closeness*0.5;
+    const alpha=0.05+closeness*0.2;
+
+    const midX=(na.x+nb.x)/2,midY=(na.y+nb.y)/2;
+    const cpx=midX+(cx-midX)*0.3,cpy=midY+(cy-midY)*0.3;
+
+    const grad=X.createLinearGradient(na.x,na.y,nb.x,nb.y);
+    const r1=Math.round(106*sat+160*(1-sat)),g1=Math.round(170*sat+170*(1-sat)),b1=Math.round(184*sat+175*(1-sat));
+    const r2=Math.round(217*sat+175*(1-sat)),g2=Math.round(149*sat+165*(1-sat)),b2=Math.round(106*sat+170*(1-sat));
+    grad.addColorStop(0,`rgba(${r1},${g1},${b1},${alpha})`);
+    grad.addColorStop(1,`rgba(${r2},${g2},${b2},${alpha})`);
+    X.globalAlpha=1;X.strokeStyle=grad;X.lineWidth=0.5;
+    X.beginPath();X.moveTo(na.x,na.y);X.quadraticCurveTo(cpx,cpy,nb.x,nb.y);X.stroke();
+  }
+
+  // Nodes
+  for(const n of nodes){
+    const br=0.4+0.6*(n.count/200);
+    const g=X.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*4);
+    const c=n.type==='scorer'?'100,175,195':'225,155,100';
+    g.addColorStop(0,`rgba(${c},${br*0.25})`);g.addColorStop(1,`rgba(${c},0)`);
+    X.globalAlpha=1;X.fillStyle=g;
+    X.beginPath();X.arc(n.x,n.y,n.r*4,0,Math.PI*2);X.fill();
+
+    X.globalAlpha=br;
+    X.fillStyle=n.type==='scorer'?'#6aaab8':'#d9956a';
+    X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();
+  }
+}
+draw();
+</script></body></html>

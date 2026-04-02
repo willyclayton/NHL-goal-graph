@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from "react";
 import Fuse from "fuse.js";
 import type { GraphNode, GraphData } from "@/lib/types";
 import { bfs } from "@/lib/pathfinding";

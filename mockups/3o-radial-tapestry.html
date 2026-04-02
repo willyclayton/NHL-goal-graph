@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>3O: Tapestry</title>
+<style>*{margin:0;padding:0}body{background:#0a1118;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:420px;line-height:1.5}
+</style></head><body>
+<div id="label">3O / Tapestry</div>
+<div id="desc">The best of both: 3F's clean single-pass gradient strokes at 0.4px width, 3J's high edge count, with a twist — edges near high-count nodes get an opacity boost. Hub goalies become visible as bright amber convergence points. Subtle ring guides return.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';
+X.scale(2,2);
+
+const cx=W/2,cy=H/2;
+const innerR=Math.min(W,H)*0.16;
+const outerR=Math.min(W,H)*0.41;
+const nodes=[];const edges=[];
+const NG=80,NS=260;
+
+for(let i=0;i<NG;i++){
+  const angle=(i/NG)*Math.PI*2-Math.PI/2;
+  const jitter=(Math.random()-0.5)*16;
+  const count=10+Math.floor(Math.random()*200);
+  nodes.push({x:cx+Math.cos(angle)*(innerR+jitter),y:cy+Math.sin(angle)*(innerR+jitter),type:'goalie',r:1.2+Math.sqrt(count)*0.15,count});
+}
+for(let i=0;i<NS;i++){
+  const angle=(i/NS)*Math.PI*2-Math.PI/2;
+  const jitter=(Math.random()-0.5)*32;
+  const count=5+Math.floor(Math.random()*150);
+  nodes.push({x:cx+Math.cos(angle)*(outerR+jitter),y:cy+Math.sin(angle)*(outerR+jitter),type:'scorer',r:0.8+Math.sqrt(count)*0.12,count});
+}
+// High density
+for(let i=NG;i<NG+NS;i++){
+  const numE=2+Math.floor(Math.random()*5);
+  for(let j=0;j<numE;j++) edges.push([i,Math.floor(Math.random()*NG)]);
+}
+const maxDist=outerR*2;
+const maxCount=210;
+const edgeData=edges.map(([a,b])=>{
+  const dx=nodes[a].x-nodes[b].x,dy=nodes[a].y-nodes[b].y;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  // Hub boost: edges connecting high-count nodes are brighter
+  const hubScore=(nodes[a].count+nodes[b].count)/(maxCount*2);
+  return{a,b,dist,hubScore};
+});
+
+function draw(){
+  X.fillStyle='#0a1118';X.fillRect(0,0,W,H);
+
+  // Subtle ring guides
+  for(let r=innerR;r<=outerR;r+=((outerR-innerR)/6)){
+    X.globalAlpha=0.012;X.strokeStyle='#5a98a8';X.lineWidth=0.5;
+    X.beginPath();X.arc(cx,cy,r,0,Math.PI*2);X.stroke();
+  }
+
+  // Single-pass clean gradient threads with hub boost
+  X.lineWidth=0.4;
+  for(const ed of edgeData){
+    const na=nodes[ed.a],nb=nodes[ed.b];
+    const closeness=1-Math.min(ed.dist/maxDist,1);
+    const hubBoost=ed.hubScore*0.08;
+    const alpha=0.05+closeness*0.14+hubBoost;
+
+    const midX=(na.x+nb.x)/2,midY=(na.y+nb.y)/2;
+    const cpx=midX+(cx-midX)*0.3,cpy=midY+(cy-midY)*0.3;
+
+    const grad=X.createLinearGradient(na.x,na.y,nb.x,nb.y);
+    grad.addColorStop(0,`rgba(90,178,200,${alpha})`);
+    grad.addColorStop(1,`rgba(228,150,88,${alpha})`);
+    X.globalAlpha=1;X.strokeStyle=grad;
+    X.beginPath();X.moveTo(na.x,na.y);X.quadraticCurveTo(cpx,cpy,nb.x,nb.y);X.stroke();
+  }
+
+  // Nodes with minimal glow
+  for(const n of nodes){
+    const br=0.5+0.5*(n.count/maxCount);
+    const g=X.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*3.5);
+    const c=n.type==='scorer'?'90,178,200':'228,150,88';
+    g.addColorStop(0,`rgba(${c},${br*0.2})`);g.addColorStop(1,`rgba(${c},0)`);
+    X.globalAlpha=1;X.fillStyle=g;
+    X.beginPath();X.arc(n.x,n.y,n.r*3.5,0,Math.PI*2);X.fill();
+
+    X.globalAlpha=br;
+    X.fillStyle=n.type==='scorer'?'#6aaab8':'#d9956a';
+    X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();
+  }
+}
+draw();
+</script></body></html>

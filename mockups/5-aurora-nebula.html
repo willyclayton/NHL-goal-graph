@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Mockup 5: Aurora Nebula</title>
+<style>*{margin:0;padding:0}body{background:#060a10;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:400px;line-height:1.5}
+</style></head><body>
+<div id="label">5 / Aurora Nebula</div>
+<div id="desc">Nodes arranged in a flowing S-curve. Density-based color fog fills the background behind clusters. Edges only visible as white web. Nodes are tiny bright dots with large soft halos that blend together in dense areas, creating a nebula effect.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';
+X.scale(2,2);
+
+const nodes=[];const edges=[];
+const N=280;
+
+// S-curve flow layout
+for(let i=0;i<N;i++){
+  const t=i/N;
+  // S-curve path
+  const baseX=W*0.15+t*W*0.7;
+  const baseY=H/2+Math.sin(t*Math.PI*2)*H*0.25;
+  const scatter=30+Math.random()*60;
+  const angle=Math.random()*Math.PI*2;
+  const type=t<0.5?'scorer':'goalie';
+  nodes.push({
+    x:baseX+Math.cos(angle)*scatter,
+    y:baseY+Math.sin(angle)*scatter,
+    type,
+    r:0.8+Math.random()*2,
+    count:Math.random(),
+    haloR:8+Math.random()*20
+  });
+}
+// Connect nearby nodes of different types
+for(let i=0;i<N;i++){
+  for(let j=i+1;j<N;j++){
+    if(nodes[i].type===nodes[j].type)continue;
+    const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d<100&&Math.random()<0.15)edges.push([i,j]);
+  }
+}
+
+function draw(){
+  X.fillStyle='#060a10';X.fillRect(0,0,W,H);
+
+  // Large nebula halos first (additive-like blending)
+  for(const n of nodes){
+    const g=X.createRadialGradient(n.x,n.y,0,n.x,n.y,n.haloR);
+    if(n.type==='scorer'){
+      g.addColorStop(0,'rgba(80,150,180,0.04)');
+      g.addColorStop(0.5,'rgba(60,120,160,0.02)');
+      g.addColorStop(1,'rgba(40,80,120,0)');
+    }else{
+      g.addColorStop(0,'rgba(200,140,80,0.04)');
+      g.addColorStop(0.5,'rgba(180,110,60,0.02)');
+      g.addColorStop(1,'rgba(140,80,40,0)');
+    }
+    X.globalAlpha=1;X.fillStyle=g;
+    X.beginPath();X.arc(n.x,n.y,n.haloR,0,Math.PI*2);X.fill();
+  }
+
+  // White spider-web edges
+  X.globalAlpha=0.045;X.strokeStyle='#ffffff';X.lineWidth=0.4;
+  X.beginPath();
+  for(const[a,b]of edges){
+    X.moveTo(nodes[a].x,nodes[a].y);
+    X.lineTo(nodes[b].x,nodes[b].y);
+  }
+  X.stroke();
+
+  // Tiny bright node cores
+  for(const n of nodes){
+    // Small glow ring
+    const g2=X.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*3);
+    const c=n.type==='scorer'?'130,190,210':'230,170,120';
+    g2.addColorStop(0,`rgba(${c},0.5)`);
+    g2.addColorStop(1,`rgba(${c},0)`);
+    X.globalAlpha=1;X.fillStyle=g2;
+    X.beginPath();X.arc(n.x,n.y,n.r*3,0,Math.PI*2);X.fill();
+
+    // White-hot center
+    X.globalAlpha=0.95;
+    X.fillStyle='#ffffff';
+    X.beginPath();X.arc(n.x,n.y,n.r*0.6,0,Math.PI*2);X.fill();
+
+    // Colored ring
+    X.globalAlpha=0.8;
+    X.fillStyle=n.type==='scorer'?'#6aaab8':'#d9956a';
+    X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();
+  }
+}
+draw();
+</script></body></html>

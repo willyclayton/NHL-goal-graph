@@ -11,9 +11,6 @@ import {
   BG_COLOR,
   ZOOM_MIN,
   ZOOM_MAX,
-  EDGE_ALPHA,
-  EDGE_COLOR,
-  EDGE_WIDTH,
   PATH_COLOR,
   PATH_WIDTH,
   PATH_ALPHA,
@@ -21,6 +18,19 @@ import {
   NODE_RADIUS_SCALE,
   WORLD_WIDTH,
   WORLD_HEIGHT,
+  EDGE_GLOW_WIDTH,
+  EDGE_SHARP_WIDTH,
+  EDGE_ALPHA_MIN,
+  EDGE_ALPHA_MAX,
+  EDGE_GLOW_ALPHA_MIN,
+  EDGE_GLOW_ALPHA_MAX,
+  EDGE_COLOR_SCORER,
+  EDGE_COLOR_GOALIE,
+  RADIAL_INNER_RATIO,
+  RADIAL_OUTER_RATIO,
+  RADIAL_GOALIE_JITTER,
+  RADIAL_SCORER_JITTER,
+  RADIAL_CURVE_PULL,
 } from "@/lib/constants";
 import Sidebar from "./Sidebar";
 
@@ -89,7 +99,7 @@ export default function Graph({ data }: GraphProps) {
   useEffect(() => { selectedBRef.current = selectedB; dirtyRef.current = true; }, [selectedB]);
   useEffect(() => { pathRef.current = path; dirtyRef.current = true; }, [path]);
 
-  // Pre-compute all baked data on data load
+  // Pre-compute all baked data on data load (with radial layout)
   useEffect(() => {
     const colors = new Map<string, string>();
     for (const node of data.nodes) {
@@ -105,7 +115,43 @@ export default function Graph({ data }: GraphProps) {
     }
     edgesByNodeRef.current = edgeMap;
 
-    // Bake node render arrays
+    // --- Compute radial ring layout ---
+    const centerX = WORLD_WIDTH / 2;
+    const centerY = WORLD_HEIGHT / 2;
+    const halfSize = Math.min(WORLD_WIDTH, WORLD_HEIGHT) / 2;
+    const innerR = halfSize * RADIAL_INNER_RATIO;
+    const outerR = halfSize * RADIAL_OUTER_RATIO;
+
+    const goalies = data.nodes.filter((n) => n.type === "goalie");
+    const scorers = data.nodes.filter((n) => n.type === "scorer");
+
+    // Sort by count descending so high-count nodes are distributed evenly
+    goalies.sort((a, b) => b.count - a.count);
+    scorers.sort((a, b) => b.count - a.count);
+
+    const radialPositions = new Map<string, { x: number; y: number }>();
+
+    for (let i = 0; i < goalies.length; i++) {
+      const angle = (i / goalies.length) * Math.PI * 2 - Math.PI / 2;
+      const jitterR = (Math.random() - 0.5) * 2 * RADIAL_GOALIE_JITTER * halfSize;
+      const jitterA = (Math.random() - 0.5) * 0.02;
+      radialPositions.set(goalies[i].id, {
+        x: centerX + Math.cos(angle + jitterA) * (innerR + jitterR),
+        y: centerY + Math.sin(angle + jitterA) * (innerR + jitterR),
+      });
+    }
+
+    for (let i = 0; i < scorers.length; i++) {
+      const angle = (i / scorers.length) * Math.PI * 2 - Math.PI / 2;
+      const jitterR = (Math.random() - 0.5) * 2 * RADIAL_SCORER_JITTER * halfSize;
+      const jitterA = (Math.random() - 0.5) * 0.01;
+      radialPositions.set(scorers[i].id, {
+        x: centerX + Math.cos(angle + jitterA) * (outerR + jitterR),
+        y: centerY + Math.sin(angle + jitterA) * (outerR + jitterR),
+      });
+    }
+
+    // Bake node render arrays using radial positions
     const n = data.nodes.length;
     const xs = new Float32Array(n);
     const ys = new Float32Array(n);
@@ -116,8 +162,12 @@ export default function Graph({ data }: GraphProps) {
     const counts: number[] = new Array(n);
     for (let i = 0; i < n; i++) {
       const node = data.nodes[i];
-      xs[i] = node.x * WORLD_WIDTH;
-      ys[i] = node.y * WORLD_HEIGHT;
+      const pos = radialPositions.get(node.id);
+      xs[i] = pos ? pos.x : node.x * WORLD_WIDTH;
+      ys[i] = pos ? pos.y : node.y * WORLD_HEIGHT;
+      // Also update the node's x/y for pathfinding zoom-to
+      node.x = xs[i] / WORLD_WIDTH;
+      node.y = ys[i] / WORLD_HEIGHT;
       radii[i] = nodeRadius(node.count);
       nodeColors[i] = colors.get(node.id) || "#ffffff";
       ids[i] = node.id;
@@ -140,8 +190,11 @@ export default function Graph({ data }: GraphProps) {
     edgeLayerDirtyRef.current = true;
   }, [data]);
 
-  // Rebuild edge layer + visible set when yearRange changes (debounced effect)
+  // Rebuild edge layer + visible set when yearRange changes (debounced to avoid blocking UI)
+  const yearRangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    // Update visible set immediately (cheap — just a Set build)
     const visibleSet = new Set<string>();
     for (const n of data.nodes) {
       if (n.lastYear >= yearRange[0] && n.firstYear <= yearRange[1]) {
@@ -149,35 +202,88 @@ export default function Graph({ data }: GraphProps) {
       }
     }
     visibleSetRef.current = visibleSet;
-
-    // Rebuild quadtree
-    const visible = data.nodes.filter((n) => visibleSet.has(n.id));
-    qtRef.current = quadtree<GraphNode>()
-      .x((d) => d.x * WORLD_WIDTH)
-      .y((d) => d.y * WORLD_HEIGHT)
-      .addAll(visible);
-
-    // Render edges to offscreen canvas
-    const offscreen = edgeLayerRef.current;
-    if (offscreen) {
-      const ctx = offscreen.getContext("2d")!;
-      ctx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-      ctx.globalAlpha = EDGE_ALPHA;
-      ctx.strokeStyle = EDGE_COLOR;
-      ctx.lineWidth = EDGE_WIDTH;
-      ctx.beginPath();
-      for (const edge of data.edges) {
-        if (!visibleSet.has(edge.source) || !visibleSet.has(edge.target)) continue;
-        const sn = data.nodeMap.get(edge.source);
-        const tn = data.nodeMap.get(edge.target);
-        if (!sn || !tn) continue;
-        ctx.moveTo(sn.x * WORLD_WIDTH, sn.y * WORLD_HEIGHT);
-        ctx.lineTo(tn.x * WORLD_WIDTH, tn.y * WORLD_HEIGHT);
-      }
-      ctx.stroke();
-    }
-
     dirtyRef.current = true;
+
+    // Debounce the expensive work (quadtree + edge layer)
+    if (yearRangeTimerRef.current) clearTimeout(yearRangeTimerRef.current);
+    yearRangeTimerRef.current = setTimeout(() => {
+      // Rebuild quadtree
+      const visible = data.nodes.filter((n) => visibleSet.has(n.id));
+      qtRef.current = quadtree<GraphNode>()
+        .x((d) => d.x * WORLD_WIDTH)
+        .y((d) => d.y * WORLD_HEIGHT)
+        .addAll(visible);
+
+      // Render edges to offscreen canvas (two-pass woven glow style)
+      const offscreen = edgeLayerRef.current;
+      if (offscreen) {
+        const ctx = offscreen.getContext("2d")!;
+        ctx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+        const centerX = WORLD_WIDTH / 2;
+        const centerY = WORLD_HEIGHT / 2;
+        const maxDist = Math.min(WORLD_WIDTH, WORLD_HEIGHT) * RADIAL_OUTER_RATIO;
+
+        // Pre-compute edge data
+        const visibleEdges: { sx: number; sy: number; tx: number; ty: number; dist: number }[] = [];
+        for (const edge of data.edges) {
+          if (!visibleSet.has(edge.source) || !visibleSet.has(edge.target)) continue;
+          const sn = data.nodeMap.get(edge.source);
+          const tn = data.nodeMap.get(edge.target);
+          if (!sn || !tn) continue;
+          const sx = sn.x * WORLD_WIDTH, sy = sn.y * WORLD_HEIGHT;
+          const tx = tn.x * WORLD_WIDTH, ty = tn.y * WORLD_HEIGHT;
+          const dx = sx - tx, dy = sy - ty;
+          visibleEdges.push({ sx, sy, tx, ty, dist: Math.sqrt(dx * dx + dy * dy) });
+        }
+
+        // Pass 1: Soft wide glow (accumulates in dense areas)
+        ctx.lineWidth = EDGE_GLOW_WIDTH;
+        for (const e of visibleEdges) {
+          const closeness = 1 - Math.min(e.dist / maxDist, 1);
+          const alpha = EDGE_GLOW_ALPHA_MIN + closeness * (EDGE_GLOW_ALPHA_MAX - EDGE_GLOW_ALPHA_MIN);
+          const midX = (e.sx + e.tx) / 2, midY = (e.sy + e.ty) / 2;
+          const cpx = midX + (centerX - midX) * RADIAL_CURVE_PULL;
+          const cpy = midY + (centerY - midY) * RADIAL_CURVE_PULL;
+
+          const grad = ctx.createLinearGradient(e.sx, e.sy, e.tx, e.ty);
+          grad.addColorStop(0, `rgba(${EDGE_COLOR_SCORER},${alpha})`);
+          grad.addColorStop(1, `rgba(${EDGE_COLOR_GOALIE},${alpha})`);
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(e.sx, e.sy);
+          ctx.quadraticCurveTo(cpx, cpy, e.tx, e.ty);
+          ctx.stroke();
+        }
+
+        // Pass 2: Sharp gradient core
+        ctx.lineWidth = EDGE_SHARP_WIDTH;
+        for (const e of visibleEdges) {
+          const closeness = 1 - Math.min(e.dist / maxDist, 1);
+          const alpha = EDGE_ALPHA_MIN + closeness * (EDGE_ALPHA_MAX - EDGE_ALPHA_MIN);
+          const midX = (e.sx + e.tx) / 2, midY = (e.sy + e.ty) / 2;
+          const cpx = midX + (centerX - midX) * RADIAL_CURVE_PULL;
+          const cpy = midY + (centerY - midY) * RADIAL_CURVE_PULL;
+
+          const grad = ctx.createLinearGradient(e.sx, e.sy, e.tx, e.ty);
+          grad.addColorStop(0, `rgba(${EDGE_COLOR_SCORER},${alpha})`);
+          grad.addColorStop(1, `rgba(${EDGE_COLOR_GOALIE},${alpha})`);
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(e.sx, e.sy);
+          ctx.quadraticCurveTo(cpx, cpy, e.tx, e.ty);
+          ctx.stroke();
+        }
+      }
+
+      dirtyRef.current = true;
+    }, 150);
+
+    return () => {
+      if (yearRangeTimerRef.current) clearTimeout(yearRangeTimerRef.current);
+    };
   }, [data, yearRange]);
 
   // Pathfinding
@@ -300,8 +406,36 @@ export default function Graph({ data }: GraphProps) {
         ctx.stroke();
       }
 
-      // --- Draw nodes ---
+      // --- Draw nodes with glow ---
       if (nr) {
+        // Glow pass first (only at reasonable zoom levels to avoid perf hit)
+        if (k >= 0.5) {
+          for (let i = 0; i < nr.xs.length; i++) {
+            const id = nr.ids[i];
+            if (!visibleSet.has(id)) continue;
+            const nx = nr.xs[i];
+            const ny = nr.ys[i];
+            const glowR = nr.radii[i] * 4;
+            if (nx < vx0 - glowR || nx > vx1 + glowR || ny < vy0 - glowR || ny > vy1 + glowR) continue;
+
+            const brightness = 0.5 + 0.5 * (nr.counts[i] / 200);
+            const dimmed = hasPath && !pathNodes.has(id);
+            const isScorer = nr.ids[i].startsWith("s_");
+            const c = isScorer ? "90,180,205" : "230,155,90";
+            const glowAlpha = (dimmed ? 0.05 : brightness * 0.25);
+
+            const grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, glowR);
+            grad.addColorStop(0, `rgba(${c},${glowAlpha})`);
+            grad.addColorStop(1, `rgba(${c},0)`);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(nx, ny, glowR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Core dots
         for (let i = 0; i < nr.xs.length; i++) {
           const id = nr.ids[i];
           if (!visibleSet.has(id)) continue;
@@ -315,14 +449,15 @@ export default function Graph({ data }: GraphProps) {
           const r = nr.radii[i];
           const isOnPath = pathNodes.has(id);
           const isSelected = id === selAId || id === selBId;
+          const brightness = 0.5 + 0.5 * (nr.counts[i] / 200);
 
-          ctx.globalAlpha = (hasPath && !isOnPath) ? 0.15 : 1;
+          ctx.globalAlpha = (hasPath && !isOnPath) ? 0.15 : brightness;
           ctx.fillStyle = nr.colors[i];
           ctx.beginPath();
           ctx.arc(nx, ny, r, 0, Math.PI * 2);
           ctx.fill();
 
-          // Highlight ring for selected/path nodes only (no hover)
+          // Highlight ring for selected/path nodes only
           if (isOnPath || isSelected) {
             ctx.globalAlpha = 1;
             ctx.strokeStyle = isOnPath ? PATH_COLOR : "#ffffff";

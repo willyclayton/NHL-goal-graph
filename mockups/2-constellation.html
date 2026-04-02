@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Mockup 2: Constellation Map</title>
+<style>*{margin:0;padding:0}body{background:#070d14;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:400px;line-height:1.5}
+</style></head><body>
+<div id="label">2 / Constellation Map</div>
+<div id="desc">Nodes arranged in organic clusters like star constellations. Edges are subtle dotted lines. Background has faint star dust particles. Scorers and goalies form distinct "galaxies" connected by bridges.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';
+X.scale(2,2);
+
+// Background stars
+const stars=[];
+for(let i=0;i<300;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.2,a:0.1+Math.random()*0.3});
+
+// Cluster-based layout: 5-6 clusters
+const clusters=[];
+for(let i=0;i<6;i++){
+  clusters.push({
+    cx:W*0.15+Math.random()*W*0.7,
+    cy:H*0.15+Math.random()*H*0.7,
+    spread:40+Math.random()*80,
+    type:i<3?'scorer':'goalie'
+  });
+}
+
+const nodes=[];const edges=[];
+for(const cl of clusters){
+  const count=20+Math.floor(Math.random()*30);
+  const startIdx=nodes.length;
+  for(let i=0;i<count;i++){
+    const angle=Math.random()*Math.PI*2;
+    const r=Math.random()*cl.spread;
+    nodes.push({
+      x:cl.cx+Math.cos(angle)*r,
+      y:cl.cy+Math.sin(angle)*r,
+      type:cl.type,
+      r:1+Math.random()*2.5,
+      cluster:clusters.indexOf(cl)
+    });
+  }
+}
+// Intra-cluster edges + some inter-cluster bridges
+for(let i=0;i<nodes.length;i++){
+  for(let j=i+1;j<nodes.length;j++){
+    const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d<50&&Math.random()<0.3)edges.push([i,j]);
+    else if(d<200&&nodes[i].type!==nodes[j].type&&Math.random()<0.02)edges.push([i,j]);
+  }
+}
+
+function draw(){
+  // Deep space background
+  const bg=X.createRadialGradient(W/2,H/2,0,W/2,H/2,W*0.6);
+  bg.addColorStop(0,'#0d1520');bg.addColorStop(1,'#050a10');
+  X.fillStyle=bg;X.fillRect(0,0,W,H);
+
+  // Stars
+  for(const s of stars){
+    X.globalAlpha=s.a;X.fillStyle='#ffffff';
+    X.beginPath();X.arc(s.x,s.y,s.r,0,Math.PI*2);X.fill();
+  }
+
+  // Edges as subtle dashed lines
+  X.globalAlpha=0.06;X.strokeStyle='#88bbcc';X.lineWidth=0.5;
+  X.setLineDash([2,4]);
+  X.beginPath();
+  for(const[a,b]of edges){
+    X.moveTo(nodes[a].x,nodes[a].y);X.lineTo(nodes[b].x,nodes[b].y);
+  }
+  X.stroke();
+  X.setLineDash([]);
+
+  // Inter-cluster bridges brighter
+  X.globalAlpha=0.12;X.strokeStyle='#e8d8c0';X.lineWidth=0.5;
+  X.setLineDash([1,6]);
+  X.beginPath();
+  for(const[a,b]of edges){
+    if(nodes[a].type!==nodes[b].type){
+      X.moveTo(nodes[a].x,nodes[a].y);X.lineTo(nodes[b].x,nodes[b].y);
+    }
+  }
+  X.stroke();
+  X.setLineDash([]);
+
+  // Cluster halos
+  for(const cl of clusters){
+    const g=X.createRadialGradient(cl.cx,cl.cy,0,cl.cx,cl.cy,cl.spread*1.5);
+    const c=cl.type==='scorer'?'106,170,184':'217,149,106';
+    g.addColorStop(0,`rgba(${c},0.04)`);g.addColorStop(1,`rgba(${c},0)`);
+    X.globalAlpha=1;X.fillStyle=g;
+    X.fillRect(cl.cx-cl.spread*2,cl.cy-cl.spread*2,cl.spread*4,cl.spread*4);
+  }
+
+  // Nodes with star-like sparkle
+  for(const n of nodes){
+    X.globalAlpha=0.9;
+    X.fillStyle=n.type==='scorer'?'#7bbece':'#e0a878';
+    X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();
+
+    // Cross sparkle on larger nodes
+    if(n.r>2){
+      X.globalAlpha=0.2;X.strokeStyle=n.type==='scorer'?'#7bbece':'#e0a878';
+      X.lineWidth=0.5;
+      X.beginPath();X.moveTo(n.x-n.r*3,n.y);X.lineTo(n.x+n.r*3,n.y);X.stroke();
+      X.beginPath();X.moveTo(n.x,n.y-n.r*3);X.lineTo(n.x,n.y+n.r*3);X.stroke();
+    }
+  }
+}
+draw();
+</script></body></html>
