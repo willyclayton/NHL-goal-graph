@@ -123,27 +123,42 @@ export default function Graph({ data }: GraphProps) {
     const goalies = data.nodes.filter((n) => n.type === "goalie");
     const scorers = data.nodes.filter((n) => n.type === "scorer");
 
-    // Sort by count descending so high-count nodes are distributed evenly
+    // Interleave by count: place high-count nodes evenly around the ring
+    // Sort descending, then deal them into evenly-spaced slots
     goalies.sort((a, b) => b.count - a.count);
     scorers.sort((a, b) => b.count - a.count);
+    function interleave<T>(arr: T[]): T[] {
+      const out = new Array<T>(arr.length);
+      for (let i = 0; i < arr.length; i++) {
+        // Golden-ratio spacing to distribute evenly
+        const slot = Math.round((i * arr.length * 0.618033988749895) % arr.length);
+        // Find nearest empty slot
+        let s = slot;
+        while (out[s] !== undefined) s = (s + 1) % arr.length;
+        out[s] = arr[i];
+      }
+      return out;
+    }
+    const spreadGoalies = interleave(goalies);
+    const spreadScorers = interleave(scorers);
 
     const radialPositions = new Map<string, { x: number; y: number }>();
 
-    for (let i = 0; i < goalies.length; i++) {
-      const angle = (i / goalies.length) * Math.PI * 2 - Math.PI / 2;
+    for (let i = 0; i < spreadGoalies.length; i++) {
+      const angle = (i / spreadGoalies.length) * Math.PI * 2 - Math.PI / 2;
       const jitterR = (Math.random() - 0.5) * 2 * RADIAL_GOALIE_JITTER * halfSize;
       const jitterA = (Math.random() - 0.5) * 0.02;
-      radialPositions.set(goalies[i].id, {
+      radialPositions.set(spreadGoalies[i].id, {
         x: centerX + Math.cos(angle + jitterA) * (innerR + jitterR),
         y: centerY + Math.sin(angle + jitterA) * (innerR + jitterR),
       });
     }
 
-    for (let i = 0; i < scorers.length; i++) {
-      const angle = (i / scorers.length) * Math.PI * 2 - Math.PI / 2;
+    for (let i = 0; i < spreadScorers.length; i++) {
+      const angle = (i / spreadScorers.length) * Math.PI * 2 - Math.PI / 2;
       const jitterR = (Math.random() - 0.5) * 2 * RADIAL_SCORER_JITTER * halfSize;
       const jitterA = (Math.random() - 0.5) * 0.01;
-      radialPositions.set(scorers[i].id, {
+      radialPositions.set(spreadScorers[i].id, {
         x: centerX + Math.cos(angle + jitterA) * (outerR + jitterR),
         y: centerY + Math.sin(angle + jitterA) * (outerR + jitterR),
       });

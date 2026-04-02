@@ -7,9 +7,9 @@ export const ZOOM_MAX = 20;
 export const LABEL_ZOOM_THRESHOLD = 2.5;
 
 // Edges
-export const EDGE_ALPHA = 0.04;
+export const EDGE_ALPHA = 0.002;
 export const EDGE_COLOR = "#8abcd2";
-export const EDGE_WIDTH = 1;
+export const EDGE_WIDTH = 0.5;
 export const EDGE_CANVAS_SCALE = 0.25; // render edges at 1/4 res (1000x750)
 export const EDGE_FADE_START = 2.0;    // start fading edges at this zoom
 export const EDGE_FADE_END = 3.5;      // edges fully hidden at this zoom
