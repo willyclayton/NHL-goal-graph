@@ -18,14 +18,12 @@ import {
   NODE_RADIUS_SCALE,
   WORLD_WIDTH,
   WORLD_HEIGHT,
-  EDGE_GLOW_WIDTH,
-  EDGE_SHARP_WIDTH,
-  EDGE_ALPHA_MIN,
-  EDGE_ALPHA_MAX,
-  EDGE_GLOW_ALPHA_MIN,
-  EDGE_GLOW_ALPHA_MAX,
-  EDGE_COLOR_SCORER,
-  EDGE_COLOR_GOALIE,
+  EDGE_ALPHA,
+  EDGE_COLOR,
+  EDGE_WIDTH,
+  EDGE_CANVAS_SCALE,
+  EDGE_FADE_START,
+  EDGE_FADE_END,
   RADIAL_INNER_RATIO,
   RADIAL_OUTER_RATIO,
   RADIAL_GOALIE_JITTER,
@@ -182,10 +180,10 @@ export default function Graph({ data }: GraphProps) {
     sortedByCountRef.current = sorted;
     landmarkIndicesRef.current = sorted.slice(0, LANDMARK_COUNT);
 
-    // Create offscreen edge canvas
+    // Create offscreen edge canvas at reduced resolution
     const offscreen = document.createElement("canvas");
-    offscreen.width = WORLD_WIDTH;
-    offscreen.height = WORLD_HEIGHT;
+    offscreen.width = WORLD_WIDTH * EDGE_CANVAS_SCALE;
+    offscreen.height = WORLD_HEIGHT * EDGE_CANVAS_SCALE;
     edgeLayerRef.current = offscreen;
     edgeLayerDirtyRef.current = true;
   }, [data]);
@@ -214,86 +212,31 @@ export default function Graph({ data }: GraphProps) {
         .y((d) => d.y * WORLD_HEIGHT)
         .addAll(visible);
 
-      // Render edges to offscreen canvas (batched woven glow style)
+      // Render edges to offscreen canvas (reduced resolution, batched)
       const offscreen = edgeLayerRef.current;
       if (offscreen) {
         const ectx = offscreen.getContext("2d")!;
-        ectx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        const sw = WORLD_WIDTH * EDGE_CANVAS_SCALE;
+        const sh = WORLD_HEIGHT * EDGE_CANVAS_SCALE;
+        ectx.clearRect(0, 0, sw, sh);
 
-        const wcx = WORLD_WIDTH / 2;
-        const wcy = WORLD_HEIGHT / 2;
-        const maxDist = Math.min(WORLD_WIDTH, WORLD_HEIGHT) * RADIAL_OUTER_RATIO;
-
-        // Bucket edges by distance for batched drawing (4 bands)
-        const NBUCKETS = 4;
-        const buckets: { sx: number; sy: number; tx: number; ty: number; cpx: number; cpy: number }[][] =
-          Array.from({ length: NBUCKETS }, () => []);
-
+        ectx.globalAlpha = EDGE_ALPHA;
+        ectx.strokeStyle = EDGE_COLOR;
+        ectx.lineWidth = EDGE_WIDTH * EDGE_CANVAS_SCALE;
+        ectx.beginPath();
         for (const edge of data.edges) {
           if (!visibleSet.has(edge.source) || !visibleSet.has(edge.target)) continue;
           const sn = data.nodeMap.get(edge.source);
           const tn = data.nodeMap.get(edge.target);
           if (!sn || !tn) continue;
-          const sx = sn.x * WORLD_WIDTH, sy = sn.y * WORLD_HEIGHT;
-          const tx = tn.x * WORLD_WIDTH, ty = tn.y * WORLD_HEIGHT;
-          const dx = sx - tx, dy = sy - ty;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const closeness = 1 - Math.min(dist / maxDist, 1);
-          const bi = Math.min(NBUCKETS - 1, Math.floor(closeness * NBUCKETS));
-          const midX = (sx + tx) / 2, midY = (sy + ty) / 2;
-          buckets[bi].push({
-            sx, sy, tx, ty,
-            cpx: midX + (wcx - midX) * RADIAL_CURVE_PULL,
-            cpy: midY + (wcy - midY) * RADIAL_CURVE_PULL,
-          });
+          ectx.moveTo(sn.x * sw, sn.y * sh);
+          ectx.lineTo(tn.x * sw, tn.y * sh);
         }
-
-        // Draw each bucket as batched paths (glow + sharp, scorer color + goalie color)
-        for (let bi = 0; bi < NBUCKETS; bi++) {
-          const bucket = buckets[bi];
-          if (bucket.length === 0) continue;
-          const t = (bi + 0.5) / NBUCKETS; // 0..1 closeness
-
-          // --- Glow pass (wide, low alpha, accumulates in dense areas) ---
-          const glowA = 0.008 + t * 0.018;
-          ectx.lineWidth = EDGE_GLOW_WIDTH;
-
-          // Scorer blue glow
-          ectx.globalAlpha = glowA;
-          ectx.strokeStyle = `rgb(${EDGE_COLOR_SCORER})`;
-          ectx.beginPath();
-          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
-          ectx.stroke();
-
-          // Goalie amber glow
-          ectx.globalAlpha = glowA;
-          ectx.strokeStyle = `rgb(${EDGE_COLOR_GOALIE})`;
-          ectx.beginPath();
-          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
-          ectx.stroke();
-
-          // --- Sharp pass (thin core) ---
-          const sharpA = 0.03 + t * 0.1;
-          ectx.lineWidth = EDGE_SHARP_WIDTH;
-
-          // Scorer blue core
-          ectx.globalAlpha = sharpA;
-          ectx.strokeStyle = `rgb(${EDGE_COLOR_SCORER})`;
-          ectx.beginPath();
-          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
-          ectx.stroke();
-
-          // Goalie amber core
-          ectx.globalAlpha = sharpA;
-          ectx.strokeStyle = `rgb(${EDGE_COLOR_GOALIE})`;
-          ectx.beginPath();
-          for (const e of bucket) { ectx.moveTo(e.sx, e.sy); ectx.quadraticCurveTo(e.cpx, e.cpy, e.tx, e.ty); }
-          ectx.stroke();
-        }
+        ectx.stroke();
       }
 
       dirtyRef.current = true;
-    }, 150);
+    }, 400);
 
     return () => {
       if (yearRangeTimerRef.current) clearTimeout(yearRangeTimerRef.current);
@@ -400,11 +343,13 @@ export default function Graph({ data }: GraphProps) {
       // Apply world transform
       ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * t.x, dpr * t.y);
 
-      // --- A1: Draw edges from pre-rendered offscreen canvas ---
+      // --- Draw edges from pre-rendered offscreen canvas (zoom-faded) ---
       const edgeLayer = edgeLayerRef.current;
-      if (edgeLayer && k >= 0.4) {
-        ctx.globalAlpha = 1;
-        ctx.drawImage(edgeLayer, 0, 0);
+      if (edgeLayer && k < EDGE_FADE_END) {
+        const edgeAlpha = k < EDGE_FADE_START ? 1
+          : 1 - (k - EDGE_FADE_START) / (EDGE_FADE_END - EDGE_FADE_START);
+        ctx.globalAlpha = edgeAlpha;
+        ctx.drawImage(edgeLayer, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
       }
 
       // --- Draw path edges (pre-baked coords) ---

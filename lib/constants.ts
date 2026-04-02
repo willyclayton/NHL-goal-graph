@@ -6,24 +6,19 @@ export const ZOOM_MIN = 0.3;
 export const ZOOM_MAX = 20;
 export const LABEL_ZOOM_THRESHOLD = 2.5;
 
-// Edges (radial gradient style)
-export const EDGE_ALPHA = 0.015;
+// Edges
+export const EDGE_ALPHA = 0.008;
 export const EDGE_COLOR = "#8abcd2";
 export const EDGE_WIDTH = 0.3;
-export const EDGE_GLOW_WIDTH = 3.5;
-export const EDGE_SHARP_WIDTH = 0.5;
-export const EDGE_ALPHA_MIN = 0.06;
-export const EDGE_ALPHA_MAX = 0.25;
-export const EDGE_GLOW_ALPHA_MIN = 0.008;
-export const EDGE_GLOW_ALPHA_MAX = 0.026;
-export const EDGE_COLOR_SCORER = "90,180,205";
-export const EDGE_COLOR_GOALIE = "230,150,85";
+export const EDGE_CANVAS_SCALE = 0.25; // render edges at 1/4 res (1000x750)
+export const EDGE_FADE_START = 2.0;    // start fading edges at this zoom
+export const EDGE_FADE_END = 3.5;      // edges fully hidden at this zoom
 
 // Radial layout
-export const RADIAL_INNER_RATIO = 0.17; // goalie ring as fraction of half-height
-export const RADIAL_OUTER_RATIO = 0.42; // scorer ring
-export const RADIAL_GOALIE_JITTER = 0.005; // normalized jitter
-export const RADIAL_SCORER_JITTER = 0.009;
+export const RADIAL_INNER_RATIO = 0.25; // goalie ring as fraction of half-height
+export const RADIAL_OUTER_RATIO = 0.45; // scorer ring
+export const RADIAL_GOALIE_JITTER = 0.008; // normalized jitter
+export const RADIAL_SCORER_JITTER = 0.012;
 export const RADIAL_CURVE_PULL = 0.3; // bezier pull toward center
 
 // Highlighted path
