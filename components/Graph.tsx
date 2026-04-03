@@ -24,12 +24,9 @@ import {
   EDGE_CANVAS_SCALE,
   EDGE_FADE_START,
   EDGE_FADE_END,
-  RADIAL_INNER_RATIO,
   RADIAL_OUTER_RATIO,
-  RADIAL_GOALIE_JITTER,
-  RADIAL_SCORER_JITTER,
-  RADIAL_CURVE_PULL,
 } from "@/lib/constants";
+import { computeLayout, type LayoutType } from "@/lib/layouts";
 import Sidebar from "./Sidebar";
 
 interface GraphProps {
@@ -53,6 +50,7 @@ export default function Graph({ data }: GraphProps) {
   const [selectedB, setSelectedB] = useState<GraphNode | null>(null);
   const [path, setPath] = useState<string[] | null>(null);
   const [yearRange, setYearRange] = useState<[number, number]>([2010, 2026]);
+  const [layout, setLayout] = useState<LayoutType>("rings");
 
   // Refs for render loop (avoids stale closures)
   const selectedARef = useRef<GraphNode | null>(null);
@@ -97,7 +95,7 @@ export default function Graph({ data }: GraphProps) {
   useEffect(() => { selectedBRef.current = selectedB; dirtyRef.current = true; }, [selectedB]);
   useEffect(() => { pathRef.current = path; dirtyRef.current = true; }, [path]);
 
-  // Pre-compute all baked data on data load (with radial layout)
+  // Pre-compute all baked data on data load or layout change
   useEffect(() => {
     const colors = new Map<string, string>();
     for (const node of data.nodes) {
@@ -113,58 +111,10 @@ export default function Graph({ data }: GraphProps) {
     }
     edgesByNodeRef.current = edgeMap;
 
-    // --- Compute radial ring layout ---
-    const centerX = WORLD_WIDTH / 2;
-    const centerY = WORLD_HEIGHT / 2;
-    const halfSize = Math.min(WORLD_WIDTH, WORLD_HEIGHT) / 2;
-    const innerR = halfSize * RADIAL_INNER_RATIO;
-    const outerR = halfSize * RADIAL_OUTER_RATIO;
+    // --- Compute layout positions ---
+    const positions = computeLayout(layout, data.nodes);
 
-    const goalies = data.nodes.filter((n) => n.type === "goalie");
-    const scorers = data.nodes.filter((n) => n.type === "scorer");
-
-    // Interleave by count: place high-count nodes evenly around the ring
-    // Sort descending, then deal them into evenly-spaced slots
-    goalies.sort((a, b) => b.count - a.count);
-    scorers.sort((a, b) => b.count - a.count);
-    function interleave<T>(arr: T[]): T[] {
-      const out = new Array<T>(arr.length);
-      for (let i = 0; i < arr.length; i++) {
-        // Golden-ratio spacing to distribute evenly
-        const slot = Math.round((i * arr.length * 0.618033988749895) % arr.length);
-        // Find nearest empty slot
-        let s = slot;
-        while (out[s] !== undefined) s = (s + 1) % arr.length;
-        out[s] = arr[i];
-      }
-      return out;
-    }
-    const spreadGoalies = interleave(goalies);
-    const spreadScorers = interleave(scorers);
-
-    const radialPositions = new Map<string, { x: number; y: number }>();
-
-    for (let i = 0; i < spreadGoalies.length; i++) {
-      const angle = (i / spreadGoalies.length) * Math.PI * 2 - Math.PI / 2;
-      const jitterR = (Math.random() - 0.5) * 2 * RADIAL_GOALIE_JITTER * halfSize;
-      const jitterA = (Math.random() - 0.5) * 0.02;
-      radialPositions.set(spreadGoalies[i].id, {
-        x: centerX + Math.cos(angle + jitterA) * (innerR + jitterR),
-        y: centerY + Math.sin(angle + jitterA) * (innerR + jitterR),
-      });
-    }
-
-    for (let i = 0; i < spreadScorers.length; i++) {
-      const angle = (i / spreadScorers.length) * Math.PI * 2 - Math.PI / 2;
-      const jitterR = (Math.random() - 0.5) * 2 * RADIAL_SCORER_JITTER * halfSize;
-      const jitterA = (Math.random() - 0.5) * 0.01;
-      radialPositions.set(spreadScorers[i].id, {
-        x: centerX + Math.cos(angle + jitterA) * (outerR + jitterR),
-        y: centerY + Math.sin(angle + jitterA) * (outerR + jitterR),
-      });
-    }
-
-    // Bake node render arrays using radial positions
+    // Bake node render arrays
     const n = data.nodes.length;
     const xs = new Float32Array(n);
     const ys = new Float32Array(n);
@@ -175,7 +125,7 @@ export default function Graph({ data }: GraphProps) {
     const counts: number[] = new Array(n);
     for (let i = 0; i < n; i++) {
       const node = data.nodes[i];
-      const pos = radialPositions.get(node.id);
+      const pos = positions.get(node.id);
       xs[i] = pos ? pos.x : node.x * WORLD_WIDTH;
       ys[i] = pos ? pos.y : node.y * WORLD_HEIGHT;
       // Also update the node's x/y for pathfinding zoom-to
@@ -201,7 +151,7 @@ export default function Graph({ data }: GraphProps) {
     offscreen.height = WORLD_HEIGHT * EDGE_CANVAS_SCALE;
     edgeLayerRef.current = offscreen;
     edgeLayerDirtyRef.current = true;
-  }, [data]);
+  }, [data, layout]);
 
   // Rebuild edge layer + visible set when yearRange changes (debounced to avoid blocking UI)
   const yearRangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -321,12 +271,26 @@ export default function Graph({ data }: GraphProps) {
 
     select(canvas).call(zoomBehavior);
 
-    // Center graph — zoom to fit the radial rings, not the full world
-    const ringDiameter = Math.min(WORLD_WIDTH, WORLD_HEIGHT) * RADIAL_OUTER_RATIO * 2 * 1.15;
-    const initialK = Math.min(width, height) / ringDiameter;
-    const initialX = width / 2 - (WORLD_WIDTH / 2) * initialK;
-    const initialY = height / 2 - (WORLD_HEIGHT / 2) * initialK;
-    select(canvas).call(zoomBehavior.transform, zoomIdentity.translate(initialX, initialY).scale(initialK));
+    // Center graph — zoom to fit all nodes with padding
+    const nr = nodeRenderRef.current;
+    if (nr && nr.xs.length > 0) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let i = 0; i < nr.xs.length; i++) {
+        if (nr.xs[i] < minX) minX = nr.xs[i];
+        if (nr.xs[i] > maxX) maxX = nr.xs[i];
+        if (nr.ys[i] < minY) minY = nr.ys[i];
+        if (nr.ys[i] > maxY) maxY = nr.ys[i];
+      }
+      const pad = 80;
+      const contentW = (maxX - minX) + pad * 2;
+      const contentH = (maxY - minY) + pad * 2;
+      const contentCx = (minX + maxX) / 2;
+      const contentCy = (minY + maxY) / 2;
+      const initialK = Math.min(width / contentW, height / contentH) * 0.95;
+      const initialX = width / 2 - contentCx * initialK;
+      const initialY = height / 2 - contentCy * initialK;
+      select(canvas).call(zoomBehavior.transform, zoomIdentity.translate(initialX, initialY).scale(initialK));
+    }
 
     function render() {
       if (!dirtyRef.current) {
@@ -462,7 +426,7 @@ export default function Graph({ data }: GraphProps) {
       cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [data, layout]);
 
   // Click handler (no hover — click only)
   const handleClick = useCallback(
@@ -564,10 +528,12 @@ export default function Graph({ data }: GraphProps) {
         selectedB={selectedB}
         path={path}
         yearRange={yearRange}
+        layout={layout}
         onSelectNode={handleSelectNode}
         onSetPath={handleSetPath}
         onClearPath={handleClearPath}
         onYearRangeChange={setYearRange}
+        onLayoutChange={setLayout}
       />
     </>
   );

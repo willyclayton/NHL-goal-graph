@@ -5,6 +5,7 @@ import Fuse from "fuse.js";
 import type { GraphNode, GraphData } from "@/lib/types";
 import { bfs } from "@/lib/pathfinding";
 import { YEAR_MIN, YEAR_MAX } from "@/lib/constants";
+import { LAYOUT_OPTIONS, type LayoutType } from "@/lib/layouts";
 
 type Tab = "explore" | "path" | "stats";
 type ExploreView = "home" | "degree" | "hubs";
@@ -15,10 +16,12 @@ interface SidebarProps {
   selectedB: GraphNode | null;
   path: string[] | null;
   yearRange: [number, number];
+  layout: LayoutType;
   onSelectNode: (node: GraphNode) => void;
   onSetPath: (a: GraphNode, b: GraphNode, path: string[]) => void;
   onClearPath: () => void;
   onYearRangeChange: (range: [number, number]) => void;
+  onLayoutChange: (layout: LayoutType) => void;
 }
 
 export default function Sidebar({
@@ -27,10 +30,12 @@ export default function Sidebar({
   selectedB,
   path,
   yearRange,
+  layout,
   onSelectNode,
   onSetPath,
   onClearPath,
   onYearRangeChange,
+  onLayoutChange,
 }: SidebarProps) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("explore");
@@ -424,6 +429,24 @@ export default function Sidebar({
         {/* ===== STATS TAB ===== */}
         {tab === "stats" && (
           <div className="p-3">
+            {/* Layout picker */}
+            <div className="text-[10px] text-[#c8d8e0]/25 uppercase tracking-wide mb-1.5">Layout</div>
+            <div className="flex gap-1 mb-3">
+              {LAYOUT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => onLayoutChange(opt.value)}
+                  className={`text-[10px] px-2.5 py-1 rounded-md transition-colors ${
+                    layout === opt.value
+                      ? "bg-[#6aaab8]/15 text-[#6aaab8]"
+                      : "bg-white/[0.03] text-[#c8d8e0]/25 hover:text-[#c8d8e0]/40"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             {/* Era filter */}
             <div className="text-[10px] text-[#c8d8e0]/25 uppercase tracking-wide mb-1.5">Era Filter</div>
             <div className="flex gap-1 flex-wrap mb-2">

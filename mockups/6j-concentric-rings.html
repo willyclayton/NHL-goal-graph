@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>6J: Concentric Rings (current)</title>
+<style>*{margin:0;padding:0}body{background:#090e16;overflow:hidden}canvas{display:block}
+#label{position:fixed;top:20px;left:20px;color:#c8d8e0;font:600 18px Inter,system-ui;opacity:.7;z-index:1}
+#desc{position:fixed;top:50px;left:20px;color:#c8d8e0;font:13px Inter,system-ui;opacity:.35;max-width:420px;line-height:1.5;z-index:1}
+</style></head><body>
+<div id="label">6J / Concentric Rings (current)</div>
+<div id="desc">The current layout — goalies inner ring, scorers outer ring. Included for comparison with the other shapes.</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const W=window.innerWidth,H=window.innerHeight;
+C.width=W*2;C.height=H*2;C.style.width=W+'px';C.style.height=H+'px';X.scale(2,2);
+const cx=W/2,cy=H/2,R=Math.min(W,H),innerR=R*0.18,outerR=R*0.43,PHI=0.618033988749895;
+const NG=200,NS=600,nodes=[],edges=[];
+function spread(n){const o=[];for(let i=0;i<n;i++){let s=Math.round((i*n*PHI)%n);while(o[s]!==undefined)s=(s+1)%n;o[s]=i;}return o;}
+const gO=spread(NG),sO=spread(NS);
+for(let i=0;i<NG;i++){const a=(gO[i]/NG)*Math.PI*2,j=(Math.random()-.5)*14;nodes.push({x:cx+Math.cos(a)*(innerR+j),y:cy+Math.sin(a)*(innerR+j),t:'g',r:1.2+Math.random()*3,c:Math.random()});}
+for(let i=0;i<NS;i++){const a=(sO[i]/NS)*Math.PI*2,j=(Math.random()-.5)*20;nodes.push({x:cx+Math.cos(a)*(outerR+j),y:cy+Math.sin(a)*(outerR+j),t:'s',r:0.6+Math.random()*2,c:Math.random()});}
+for(let i=NG;i<NG+NS;i++){const ne=2+Math.floor(Math.random()*6);for(let j=0;j<ne;j++)edges.push([i,Math.floor(Math.random()*NG)]);}
+function draw(){
+X.fillStyle='#090e16';X.fillRect(0,0,W,H);
+X.globalAlpha=0.08;X.strokeStyle='#ffffff';X.lineWidth=0.3;
+X.beginPath();for(const[a,b]of edges){X.moveTo(nodes[a].x,nodes[a].y);X.lineTo(nodes[b].x,nodes[b].y);}X.stroke();
+for(const n of nodes){X.globalAlpha=0.5+0.5*n.c;X.fillStyle=n.t==='s'?'#5cc0d8':'#e89858';X.beginPath();X.arc(n.x,n.y,n.r,0,Math.PI*2);X.fill();}
+}draw();
+</script></body></html>
