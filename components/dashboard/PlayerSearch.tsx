@@ -107,31 +107,31 @@ export default function PlayerSearch({
 
       {/* Dropdown */}
       {open && filteredResults.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border border-border/50 rounded-lg shadow-xl max-h-64 overflow-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border border-border/50 rounded-lg shadow-xl max-h-64 overflow-auto overscroll-contain">
           {filteredResults.map((player) => {
             const isActive = selected.some((p) => p.id === player.id);
             return (
               <button
                 key={player.id}
                 onClick={() => handleSelect(player)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between ${
+                className={`w-full text-left px-3 py-2.5 md:py-2 text-sm hover:bg-muted/50 active:bg-muted/70 transition-colors flex items-center justify-between gap-2 ${
                   isActive ? "bg-primary/10" : ""
                 }`}
               >
-                <div>
+                <div className="min-w-0">
                   <span className="font-medium">{player.name}</span>
                   <span className="text-muted-foreground ml-2 text-xs">
                     {player.pos}
                   </span>
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground shrink-0">
                   {player.totalGoals
                     ? `${player.totalGoals} G`
                     : player.goalsAgainst
                       ? `${player.goalsAgainst} GA`
                       : ""}
                   {player.teams && player.teams.length > 0 && (
-                    <span className="ml-1">
+                    <span className="ml-1 hidden sm:inline">
                       {player.teams.slice(0, 3).join(", ")}
                     </span>
                   )}

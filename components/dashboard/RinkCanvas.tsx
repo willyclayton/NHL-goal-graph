@@ -143,6 +143,46 @@ export default function RinkCanvas({
     [goals, saves, onHover]
   );
 
+  // Touch support for mobile — tap shows tooltip
+  const handleTouch = useCallback(
+    (e: React.TouchEvent<HTMLCanvasElement>) => {
+      if (!onHover) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = touch.clientX - rect.left;
+      const my = touch.clientY - rect.top;
+      const w = rect.width;
+      const h = rect.height;
+
+      const t = computeRinkTransform(w, h);
+      const hitRadius = 14; // Larger hit target for touch
+
+      for (const pt of goals) {
+        const norm = normalizeToAttackingHalf(pt.x, pt.y);
+        const { px, py } = nhlToCanvas(norm.x, norm.y, t);
+        if (Math.abs(px - mx) < hitRadius && Math.abs(py - my) < hitRadius) {
+          onHover(pt, "goal");
+          return;
+        }
+      }
+      for (const pt of saves) {
+        const norm = normalizeToAttackingHalf(pt.x, pt.y);
+        const { px, py } = nhlToCanvas(norm.x, norm.y, t);
+        if (Math.abs(px - mx) < hitRadius && Math.abs(py - my) < hitRadius) {
+          onHover(pt, "save");
+          return;
+        }
+      }
+      onHover(null, "goal");
+    },
+    [goals, saves, onHover]
+  );
+
   return (
     <div
       ref={containerRef}
@@ -150,9 +190,11 @@ export default function RinkCanvas({
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full"
+        className="w-full h-full touch-none"
         onMouseMove={handleMouseMove}
         onMouseLeave={() => onHover?.(null, "goal")}
+        onTouchStart={handleTouch}
+        onTouchEnd={() => onHover?.(null, "goal")}
       />
     </div>
   );

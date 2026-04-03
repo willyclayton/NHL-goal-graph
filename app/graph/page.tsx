@@ -11,5 +11,9 @@ export default function GraphPage() {
     return <LoadingScreen error={error} />;
   }
 
-  return <Graph data={data} />;
+  return (
+    <div className="h-screen w-screen overflow-hidden">
+      <Graph data={data} />
+    </div>
+  );
 }

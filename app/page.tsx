@@ -73,13 +73,13 @@ export default function Dashboard() {
         </div>
 
         {/* Mobile bottom nav */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t border-border/30 px-2 py-2 z-50">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/30 px-2 py-2 mobile-safe-bottom z-50">
           <TabsList className="bg-transparent w-full h-auto gap-0 p-0">
             {tabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}
                 value={tab.id}
-                className="flex-1 flex flex-col items-center gap-1 py-2 text-[10px] data-[state=active]:text-primary text-muted-foreground data-[state=active]:bg-transparent rounded-lg"
+                className="flex-1 flex flex-col items-center gap-1 py-2 text-[10px] data-[state=active]:text-primary text-muted-foreground data-[state=active]:bg-transparent rounded-lg transition-colors duration-200"
               >
                 <tab.icon className="w-5 h-5" />
                 {tab.label}
