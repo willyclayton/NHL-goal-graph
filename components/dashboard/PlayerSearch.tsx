@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { PlayerEnriched } from "@/lib/dashboard-types";
 import { usePlayersData } from "@/lib/use-players-data";
 import { Badge } from "@/components/ui/badge";
@@ -22,22 +22,36 @@ export default function PlayerSearch({
   placeholder = "Search players...",
   className = "",
 }: PlayerSearchProps) {
-  const { fuse, loading } = usePlayersData();
+  const { players, fuse, loading } = usePlayersData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Top players by goals (or goals against for goalies) shown when query is empty
+  const suggestedPlayers = useMemo(() => {
+    return players
+      .filter((p) => {
+        if (positionFilter === "scorer") return p.pos !== "G";
+        if (positionFilter === "goalie") return p.pos === "G";
+        return true;
+      })
+      .filter((p) => !selected.some((s) => s.id === p.id))
+      .slice(0, 8);
+  }, [players, positionFilter, selected]);
 
   const results =
     query.length > 0
       ? fuse.search(query, { limit: 20 }).map((r) => r.item)
       : [];
 
-  const filteredResults = results.filter((p) => {
-    if (positionFilter === "scorer") return p.pos !== "G";
-    if (positionFilter === "goalie") return p.pos === "G";
-    return true;
-  });
+  const filteredResults = query.length > 0
+    ? results.filter((p) => {
+        if (positionFilter === "scorer") return p.pos !== "G";
+        if (positionFilter === "goalie") return p.pos === "G";
+        return true;
+      })
+    : suggestedPlayers;
 
   const handleSelect = useCallback(
     (player: PlayerEnriched) => {
@@ -108,6 +122,11 @@ export default function PlayerSearch({
       {/* Dropdown */}
       {open && filteredResults.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border border-border/50 rounded-lg shadow-xl max-h-64 overflow-auto overscroll-contain">
+          {query.length === 0 && (
+            <div className="px-3 pt-2 pb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              Popular
+            </div>
+          )}
           {filteredResults.map((player) => {
             const isActive = selected.some((p) => p.id === player.id);
             return (
