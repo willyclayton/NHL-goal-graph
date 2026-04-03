@@ -11,12 +11,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "NHL Goal Graph — Degrees of Separation",
+  title: "NHL Stats Dashboard",
   description:
-    "Interactive network graph of every NHL goal since 2010. Find the shortest path between any two players.",
+    "Interactive visualizations of every NHL goal since 2010. Goal maps, career arcs, and head-to-head matchups.",
   openGraph: {
-    title: "NHL Goal Graph",
-    description: "Degrees of separation between every NHL scorer and goalie since 2010.",
+    title: "NHL Stats Dashboard",
+    description: "Interactive visualizations of every NHL goal since 2010.",
     images: ["/og-image.png"],
   },
 };
