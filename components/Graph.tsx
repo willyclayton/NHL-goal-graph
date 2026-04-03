@@ -206,7 +206,7 @@ export default function Graph({ data }: GraphProps) {
     return () => {
       if (yearRangeTimerRef.current) clearTimeout(yearRangeTimerRef.current);
     };
-  }, [data, yearRange]);
+  }, [data, yearRange, layout]);
 
   // Pathfinding
   useEffect(() => {
@@ -426,7 +426,38 @@ export default function Graph({ data }: GraphProps) {
       cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, layout]);
+  }, [data]);
+
+  // Re-center view when layout changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const nr = nodeRenderRef.current;
+    if (!canvas || !nr || nr.xs.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < nr.xs.length; i++) {
+      if (nr.xs[i] < minX) minX = nr.xs[i];
+      if (nr.xs[i] > maxX) maxX = nr.xs[i];
+      if (nr.ys[i] < minY) minY = nr.ys[i];
+      if (nr.ys[i] > maxY) maxY = nr.ys[i];
+    }
+    const pad = 80;
+    const contentW = (maxX - minX) + pad * 2;
+    const contentH = (maxY - minY) + pad * 2;
+    const contentCx = (minX + maxX) / 2;
+    const contentCy = (minY + maxY) / 2;
+    const w = window.innerWidth, h = window.innerHeight;
+    const k = Math.min(w / contentW, h / contentH) * 0.95;
+    const tx = w / 2 - contentCx * k;
+    const ty = h / 2 - contentCy * k;
+
+    const zoomBehavior = d3Zoom<HTMLCanvasElement, unknown>().scaleExtent([ZOOM_MIN, ZOOM_MAX]);
+    select(canvas).transition().duration(600).call(
+      zoomBehavior.transform,
+      zoomIdentity.translate(tx, ty).scale(k)
+    );
+    dirtyRef.current = true;
+  }, [layout]);
 
   // Click handler (no hover — click only)
   const handleClick = useCallback(
