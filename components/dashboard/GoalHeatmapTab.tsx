@@ -277,7 +277,7 @@ export default function GoalHeatmapTab() {
 
   if (loading) {
     return (
-      <div className="flex flex-col lg:flex-row gap-6 h-full">
+      <div className="flex flex-col lg:flex-row gap-4">
         <div className="lg:w-72 shrink-0 hidden lg:block">
           <FiltersSkeleton />
         </div>
@@ -298,19 +298,18 @@ export default function GoalHeatmapTab() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
       {/* Desktop filters sidebar */}
       <div className="hidden lg:block lg:w-72 shrink-0">
         <FiltersPanel {...filterProps} />
       </div>
 
-      {/* Rink visualization */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Rink + stats */}
+      <div className="flex-1 min-w-0">
         {/* Stats bar + mobile filter button */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">
-              Showing{" "}
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
               <span className="text-foreground font-semibold tabular-nums">
                 {goalPoints.length.toLocaleString()}
               </span>{" "}
@@ -319,7 +318,7 @@ export default function GoalHeatmapTab() {
             {filters.player && (
               <Badge
                 variant="secondary"
-                className="text-xs cursor-pointer hover:bg-destructive/20"
+                className="text-xs cursor-pointer hover:bg-destructive/20 shrink-0"
                 onClick={() =>
                   setFilters((prev) => ({ ...prev, player: null }))
                 }
@@ -330,7 +329,7 @@ export default function GoalHeatmapTab() {
             {filters.team !== "all" && (
               <Badge
                 variant="secondary"
-                className="text-xs cursor-pointer hover:bg-destructive/20"
+                className="text-xs cursor-pointer hover:bg-destructive/20 shrink-0"
                 onClick={() =>
                   setFilters((prev) => ({ ...prev, team: "all" }))
                 }
@@ -342,28 +341,20 @@ export default function GoalHeatmapTab() {
 
           {/* Mobile filter button */}
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetTrigger
-              className="lg:hidden inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-muted/50 border border-border/50 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
+            <SheetTrigger className="lg:hidden shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-muted/50 border border-border/50 text-muted-foreground hover:text-foreground transition-colors">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <line x1="4" y1="6" x2="20" y2="6" />
                 <line x1="4" y1="12" x2="16" y2="12" />
                 <line x1="4" y1="18" x2="12" y2="18" />
               </svg>
               Filters
               {activeFilterCount > 0 && (
-                <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 text-xs flex items-center justify-center font-medium">
+                <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-medium">
                   {activeFilterCount}
                 </span>
               )}
             </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[80vh] overflow-auto p-0">
+            <SheetContent side="bottom" className="max-h-[75vh] overflow-auto p-0">
               <SheetHeader className="border-b border-border/30">
                 <SheetTitle>Filters</SheetTitle>
               </SheetHeader>
@@ -374,12 +365,12 @@ export default function GoalHeatmapTab() {
           </Sheet>
         </div>
 
-        <div className="flex-1 bg-card/50 rounded-xl border border-border/30 p-3 md:p-4 flex items-center justify-center">
+        {/* Rink — constrained height on mobile so it doesn't overflow */}
+        <div className="bg-card/50 rounded-xl border border-border/30 p-2 md:p-4">
           <RinkCanvas
             goals={goalPoints}
             goalColor="#f0c050"
             goalRadius={filters.player ? 4.5 : 2.5}
-            className="max-w-2xl"
           />
         </div>
       </div>
