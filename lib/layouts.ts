@@ -19,11 +19,13 @@ export const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
 const PHI = 0.618033988749895;
 
 function interleave<T>(arr: T[]): T[] {
-  const out = new Array<T>(arr.length);
-  for (let i = 0; i < arr.length; i++) {
-    const slot = Math.round((i * arr.length * PHI) % arr.length);
+  if (arr.length <= 1) return [...arr];
+  const n = arr.length;
+  const out = new Array<T>(n);
+  for (let i = 0; i < n; i++) {
+    const slot = Math.floor((i * n * PHI) % n);
     let s = slot;
-    while (out[s] !== undefined) s = (s + 1) % arr.length;
+    while (out[s] !== undefined) s = (s + 1) % n;
     out[s] = arr[i];
   }
   return out;
